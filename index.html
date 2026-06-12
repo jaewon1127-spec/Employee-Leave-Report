@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>휴가대장 생성기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root {
+    --ink: #1d2b24; --ink-soft: #5a6b62;
+    --paper: #f7f6f2; --card: #ffffff; --line: #e3e1d8;
+    --accent: #1e6b4e; --accent-soft: #e7f1ec;
+    --warn-bg: #fdf6e7; --warn-line: #e8d9b0; --warn-ink: #7a5d1e;
+    --err: #b3402f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--paper); color: var(--ink);
+    min-height: 100vh; padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  header { margin-bottom: 36px; }
+  .eyebrow { font-size: 12px; letter-spacing: .18em; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+  .sub { margin-top: 8px; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
+
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px; margin-bottom: 18px; }
+  .step-title { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .step-no { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-title h2 { font-size: 16px; font-weight: 700; }
+  .step-title .right { margin-left: auto; display: flex; gap: 8px; }
+
+  .btn-sub {
+    background: #fff; border: 1.5px solid var(--accent); color: var(--accent);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: background .12s;
+  }
+  .btn-sub:hover { background: var(--accent-soft); }
+
+  .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 680px) { .drops { grid-template-columns: 1fr; } }
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 10px; padding: 24px 16px;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+    background: #fbfaf7;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop.done { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+  .drop .label { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .drop .hint { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+  .drop .fname { font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 8px; word-break: break-all; }
+  .drop input { display: none; }
+
+  .summary { display: none; margin-top: 16px; padding: 13px 16px; background: var(--accent-soft); border-radius: 10px; font-size: 13.5px; line-height: 1.8; }
+  .summary b { color: var(--accent); }
+  .warnbox { display: none; margin-top: 12px; padding: 13px 16px; background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 10px; font-size: 13px; color: var(--warn-ink); line-height: 1.7; }
+
+  /* ---- 데이터 수정 화면 ---- */
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab {
+    padding: 9px 20px; border-radius: 9px 9px 0 0; border: 1px solid var(--line); border-bottom: none;
+    background: #f1efe9; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--ink-soft);
+  }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .editor-tools { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .editor-tools input[type=search] {
+    padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+    font-family: inherit; width: 220px;
+  }
+  .editor-tools .count { font-size: 12.5px; color: var(--ink-soft); margin-left: auto; }
+  .tbl-scroll { max-height: 430px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table.edit { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.edit th {
+    position: sticky; top: 0; background: #efede6; font-weight: 700; padding: 9px 8px;
+    border-bottom: 1.5px solid var(--line); text-align: center; white-space: nowrap; z-index: 2;
+  }
+  table.edit td { border-bottom: 1px solid #f0eee7; padding: 2px; }
+  table.edit input, table.edit select {
+    width: 100%; border: 1px solid transparent; border-radius: 6px; padding: 7px 8px;
+    font-size: 13px; font-family: inherit; background: transparent;
+  }
+  table.edit input:hover { border-color: var(--line); background: #fff; }
+  table.edit input:focus { outline: none; border-color: var(--accent); background: #fff; }
+  table.edit td.num input { text-align: right; }
+  .del-btn {
+    border: none; background: none; color: #c9c5b8; font-size: 16px; cursor: pointer;
+    padding: 4px 8px; line-height: 1;
+  }
+  .del-btn:hover { color: var(--err); }
+  .add-row { margin-top: 10px; }
+
+  .years { display: flex; flex-wrap: wrap; gap: 8px; }
+  .year-chip {
+    padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--line);
+    background: #fbfaf7; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .12s; user-select: none;
+  }
+  .year-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .year-tools { margin-top: 12px; display: flex; gap: 14px; }
+  .year-tools button { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline; padding: 0; }
+  .note { margin-top: 14px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.7; }
+  .note code { background: #efede6; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  .check-line { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 16px; }
+  .check-line input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+  /* ---- 로컬 저장 상태바 ---- */
+  .storage-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 18px; margin-bottom: 18px; font-size: 13px;
+  }
+  .storage-dot { width: 9px; height: 9px; border-radius: 50%; background: #c9c5b8; flex-shrink: 0; }
+  .storage-dot.on { background: var(--accent); }
+  .storage-dot.off { background: var(--err); }
+  #storageMsg { color: var(--ink-soft); }
+  .storage-bar .right { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-mini {
+    background: #fff; border: 1px solid var(--line); color: var(--ink);
+    border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-mini:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-mini.danger:hover { border-color: var(--err); color: var(--err); }
+
+  /* ---- 사용 설명서 드로어 ---- */
+  #manualBtn {
+    position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+    writing-mode: vertical-rl; letter-spacing: .2em;
+    background: var(--accent); color: #fff; border: none; border-radius: 10px 0 0 10px;
+    padding: 18px 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+    font-family: inherit; z-index: 50; box-shadow: -2px 2px 10px rgba(0,0,0,.12);
+  }
+  #drawerOverlay {
+    position: fixed; inset: 0; background: rgba(20,30,25,.35); opacity: 0;
+    pointer-events: none; transition: opacity .2s; z-index: 60;
+  }
+  #drawerOverlay.open { opacity: 1; pointer-events: auto; }
+  #drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw);
+    background: var(--card); z-index: 61; transform: translateX(100%);
+    transition: transform .25s ease; box-shadow: -6px 0 24px rgba(0,0,0,.15);
+    display: flex; flex-direction: column;
+  }
+  #drawer.open { transform: translateX(0); }
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 22px; border-bottom: 1px solid var(--line);
+  }
+  .drawer-head h2 { font-size: 17px; font-weight: 800; }
+  .drawer-close { border: none; background: none; font-size: 22px; cursor: pointer; color: var(--ink-soft); padding: 4px 8px; }
+  .drawer-body { overflow-y: auto; padding: 20px 22px 40px; font-size: 13.5px; line-height: 1.75; }
+  .drawer-body h3 {
+    font-size: 14px; font-weight: 800; color: var(--accent);
+    margin: 22px 0 8px; padding-top: 16px; border-top: 1px dashed var(--line);
+  }
+  .drawer-body h3:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .drawer-body p { margin-bottom: 8px; }
+  .drawer-body ul { margin: 0 0 8px 18px; }
+  .drawer-body li { margin-bottom: 4px; }
+  .drawer-body table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 6px 0 10px; }
+  .drawer-body th, .drawer-body td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; }
+  .drawer-body th { background: #efede6; }
+  .drawer-body code { background: #efede6; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .tip { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .caution { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+
+  .gen-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  #genBtn {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    padding: 14px 32px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; transition: opacity .15s;
+  }
+  #genBtn:disabled { opacity: .35; cursor: not-allowed; }
+  #genMsg { font-size: 13.5px; color: var(--ink-soft); }
+  #genMsg.ok { color: var(--accent); font-weight: 600; }
+  #genMsg.err { color: var(--err); font-weight: 600; }
+  footer { margin-top: 30px; font-size: 12px; color: var(--ink-soft); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">인사총무팀 · 휴가 관리</div>
+    <h1>휴가대장 생성기</h1>
+    <p class="sub">인원DB와 휴가DB 파일을 올리고, 필요하면 화면에서 직접 수정한 뒤, 연도별 휴가대장·기타휴가 시트가 담긴 엑셀을 만듭니다.<br>
+    모든 처리는 이 브라우저 안에서만 이루어지며 파일이 외부로 전송되지 않습니다.</p>
+  </header>
+
+  <!-- 로컬 저장 상태 / 백업 / 복원 -->
+  <div class="storage-bar">
+    <span class="storage-dot" id="storageDot"></span>
+    <span id="storageMsg">저장 상태 확인 중...</span>
+    <span class="right">
+      <button class="btn-mini" id="backupBtn">백업 내려받기 (JSON)</button>
+      <button class="btn-mini" id="restoreBtn">백업 복원</button>
+      <button class="btn-mini danger" id="clearBtn">저장 데이터 초기화</button>
+      <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+    </span>
+  </div>
+
+  <!-- STEP 1 -->
+  <section class="step">
+    <div class="step-title">
+      <span class="step-no">1</span><h2>파일 올리기</h2>
+      <span class="right">
+        <button class="btn-sub" id="tplPeople">인원DB 양식 받기</button>
+        <button class="btn-sub" id="tplVac">휴가DB 양식 받기</button>
+      </span>
+    </div>
+    <div class="drops">
+      <label class="drop" id="dropPeople">
+        <div class="label">인원DB</div>
+        <div class="hint">클릭하거나 파일을 끌어다 놓으세요<br>(성명 · 재직여부 · 근무지 · 입사일 · 퇴사일)</div>
+        <div class="fname" id="fnamePeople"></div>
+        <input type="file" id="filePeople" accept=".xlsx,.xls,.csv">
+      </label>
+      <label class="drop" id="dropVac">
+        <div class="label">휴가DB</div>
+        <div class="hint">클릭하거나 파일을 끌어다 놓으세요<br>(YEAR · 신청일 · 성명 · 휴가구분 · 시작일 · 마지막일 · 사용일)</div>
+        <div class="fname" id="fnameVac"></div>
+        <input type="file" id="fileVac" accept=".xlsx,.xls,.csv">
+      </label>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div class="warnbox" id="warnbox"></div>
+  </section>
+
+  <!-- STEP 2: 데이터 수정 -->
+  <section class="step" id="editStep" style="display:none">
+    <div class="step-title">
+      <span class="step-no">2</span><h2>데이터 확인 · 수정</h2>
+      <span class="right">
+        <button class="btn-sub" id="dlPeople">수정한 인원DB 내려받기</button>
+        <button class="btn-sub" id="dlVac">수정한 휴가DB 내려받기</button>
+      </span>
+    </div>
+    <div class="tabs">
+      <div class="tab on" id="tabPeople">인원DB</div>
+      <div class="tab" id="tabVac">휴가DB</div>
+    </div>
+
+    <div id="panePeople">
+      <div class="tbl-scroll">
+        <table class="edit" id="tblPeople">
+          <thead><tr><th style="width:40px">No</th><th>성명</th><th>재직여부</th><th>근무지</th><th>입사일</th><th>퇴사일</th><th style="width:36px"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn-sub add-row" id="addPeople">＋ 인원 추가</button>
+    </div>
+
+    <div id="paneVac" style="display:none">
+      <div class="editor-tools">
+        <input type="search" id="vacSearch" placeholder="성명 · 연도 · 휴가구분 검색">
+        <span class="count" id="vacCount"></span>
+      </div>
+      <div class="tbl-scroll">
+        <table class="edit" id="tblVac">
+          <thead><tr><th style="width:60px">YEAR</th><th>신청일</th><th>성명</th><th>근무지</th><th>휴가구분</th><th>시작일</th><th>마지막일</th><th style="width:70px">사용일</th><th>비고</th><th style="width:36px"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn-sub add-row" id="addVac">＋ 휴가기록 추가</button>
+      <datalist id="kindList"></datalist>
+    </div>
+    <div class="note">수정 내용은 이 화면에만 유지됩니다. 다음에 이어서 쓰려면 <b>수정한 인원DB/휴가DB 내려받기</b>로 저장한 파일을 다음번에 다시 올려 주세요.</div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="step">
+    <div class="step-title"><span class="step-no">3</span><h2>생성할 연도 선택</h2></div>
+    <div class="years" id="yearChips"><span style="font-size:13.5px;color:var(--ink-soft)">두 파일을 모두 올리면 휴가DB에서 연도를 자동으로 찾아 보여줍니다.</span></div>
+    <div class="year-tools" id="yearTools" style="display:none">
+      <button id="selAll">전체 선택</button>
+      <button id="selNone">전체 해제</button>
+    </div>
+    <div class="note">정산기준일: <code>지난 연도 = 해당 연도 12월 31일</code> · <code>올해 = 오늘</code>. 부여기준일은 각 연도의 1월 1일입니다.</div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="step">
+    <div class="step-title"><span class="step-no">4</span><h2>휴가대장 만들기</h2></div>
+    <label class="check-line"><input type="checkbox" id="withEtc" checked> 기타휴가 리스트 시트도 연도별로 함께 생성</label>
+    <div class="gen-row">
+      <button id="genBtn" disabled>엑셀 파일 생성</button>
+      <span id="genMsg">파일 2개를 올리고 연도를 선택하면 버튼이 활성화됩니다.</span>
+    </div>
+  </section>
+
+  <footer>
+    계산 방식과 시트 서식(색상·테두리·병합·표시형식)은 기존 휴가대장(2026) 시트와 동일합니다.<br>
+    생성된 시트의 숫자는 계산 결과가 고정된 값입니다. 데이터가 바뀌면 다시 생성해 주세요.
+  </footer>
+</div>
+
+<!-- 사용 설명서 -->
+<button id="manualBtn">사용 설명서</button>
+<div id="drawerOverlay"></div>
+<aside id="drawer">
+  <div class="drawer-head">
+    <h2>사용 설명서</h2>
+    <button class="drawer-close" id="drawerClose" title="닫기">✕</button>
+  </div>
+  <div class="drawer-body">
+    <h3>처음 시작하기</h3>
+    <p>① <b>인원DB 양식 받기 / 휴가DB 양식 받기</b>로 엑셀 양식을 내려받아 데이터를 채웁니다.<br>
+    ② 1단계에 두 파일을 각각 올립니다.<br>
+    ③ 연도를 고르고 <b>엑셀 파일 생성</b>을 누르면 끝!</p>
+    <div class="tip">기존에 쓰던 통합 엑셀(인원DB·휴가DB 시트 포함)이 있다면 그 파일 하나를 <b>양쪽에 똑같이</b> 올려도 됩니다. 필요한 시트를 자동으로 찾아냅니다.</div>
+
+    <h3>자동 저장</h3>
+    <p>파일을 올리거나 데이터를 수정하면 <b>이 브라우저에 자동 저장</b>됩니다. 다음에 이 파일을 다시 열면 마지막 데이터가 그대로 복원되어, 파일을 매번 다시 올릴 필요가 없습니다.</p>
+    <ul>
+      <li>같은 PC · 같은 브라우저에서만 유지됩니다.</li>
+      <li>화면 위 상태바의 초록 점이 켜져 있으면 저장이 동작 중입니다.</li>
+    </ul>
+    <div class="caution">시크릿 창에서 열거나, 브라우저의 "인터넷 사용 기록 삭제"로 사이트 데이터를 지우면 저장된 내용이 사라집니다. 중요한 시점마다 <b>백업 내려받기</b>를 해 두세요.</div>
+
+    <h3>백업과 복원</h3>
+    <p><b>백업 내려받기</b> — 현재 인원DB·휴가DB 전체를 JSON 파일 하나로 저장합니다. 다른 PC로 옮기거나 보관용으로 쓰세요.<br>
+    <b>백업 복원</b> — 백업 JSON 파일을 선택하면 그 시점의 데이터로 되돌립니다. (현재 데이터는 덮어써집니다)<br>
+    <b>저장 데이터 초기화</b> — 브라우저에 저장된 데이터를 지우고 처음 상태로 돌아갑니다.</p>
+
+    <h3>데이터 수정 (2단계)</h3>
+    <ul>
+      <li>셀을 클릭해 바로 수정합니다. 수정 즉시 자동 저장됩니다.</li>
+      <li><b>＋ 추가</b> 버튼으로 인원/휴가기록을 추가, 행 끝 <b>✕</b>로 삭제합니다.</li>
+      <li>휴가DB 탭의 검색창에서 성명·연도·휴가구분으로 찾을 수 있습니다.</li>
+      <li><b>수정한 인원DB/휴가DB 내려받기</b>로 엑셀 파일로도 보관할 수 있습니다.</li>
+    </ul>
+
+    <h3>날짜 · 입력 형식</h3>
+    <ul>
+      <li>날짜는 <code>2026-06-12</code> 형식 (<code>2026.06.12</code>, <code>2026/06/12</code>도 인식)</li>
+      <li>퇴사일이 없으면 <code>-</code> 또는 빈칸</li>
+      <li>사용일은 숫자 — 하루 <code>1</code>, 반차 <code>0.5</code></li>
+      <li>휴가DB의 YEAR를 비워두면 신청일의 연도가 자동 적용됩니다.</li>
+    </ul>
+
+    <h3>집계 규칙 (기존 수식과 동일)</h3>
+    <table>
+      <tr><th>휴가구분</th><th>집계</th></tr>
+      <tr><td>연차 · 반차 · 여름휴가</td><td>연차에서 차감</td></tr>
+      <tr><td>월차</td><td>월차에서 차감 (2017.5.30 이후 입사자, 입사 12개월간 최대 11일)</td></tr>
+      <tr><td>병가 · 예비군 · 민방위 · 경조휴가 · 특별휴가</td><td>별도 항목으로 집계</td></tr>
+      <tr><td>대체휴무(반차/연차) · 무급휴가 · 만료된 연차</td><td>연도별 내역에만 표시</td></tr>
+      <tr><td>그 외 모든 구분</td><td><b>기타휴가</b>로 집계 + 기타휴가(연도) 시트에 목록 표시</td></tr>
+    </table>
+    <p>연차 발생: 근속 1년당 15일, 2년마다 1일 가산, 최대 25일.<br>
+    정산기준일: 지난 연도는 그해 12월 31일, 올해는 오늘.</p>
+
+    <h3>노란 경고 상자의 의미</h3>
+    <ul>
+      <li><b>기타휴가로 집계되는 휴가구분</b> — 표준 구분명과 다르게 입력된 항목입니다. 의도한 것이면 그대로 두고, 아니면(예: <code>경조사</code> → <code>경조휴가</code>) 2단계에서 수정하세요.</li>
+      <li><b>인원DB에 없는 성명</b> — 휴가기록은 있는데 인원DB에 없는 사람입니다. 대장에 나타나지 않으니 인원DB에 추가하거나 이름 오타를 확인하세요.</li>
+    </ul>
+
+    <h3>자주 묻는 질문</h3>
+    <p><b>Q. 저장이 안 된다고 떠요.</b><br>
+    이 파일을 PC에 내려받아 더블클릭으로 열어 주세요. 일부 미리보기 환경이나 보안 설정에서는 브라우저 저장이 막혀 있습니다. 그 경우에도 백업 내려받기/복원으로 데이터를 이어갈 수 있습니다.</p>
+    <p><b>Q. 다른 PC에서 쓰려면?</b><br>
+    이 HTML 파일과 백업 JSON을 함께 옮긴 뒤, 새 PC에서 백업 복원을 누르세요.</p>
+    <p><b>Q. 생성된 엑셀 숫자가 안 바뀌어요.</b><br>
+    생성 파일은 계산 결과가 고정된 값입니다. 데이터 수정 후 다시 생성해 주세요.</p>
+  </div>
+</aside>
+
+<script>
+'use strict';
+
+/* ===================== 날짜 유틸 (엑셀 EDATE/DATEDIF 동일) ===================== */
+function addMonths(d, n) {
+  const day = d.getDate();
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(day, last));
+  return r;
+}
+function datedifY(s, e) {
+  if (e < s) return 0;
+  let y = e.getFullYear() - s.getFullYear();
+  if (e < addMonths(s, y * 12)) y--;
+  return Math.max(0, y);
+}
+function datedifM(s, e) {
+  if (e < s) return 0;
+  let m = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+  if (e < addMonths(s, m)) m--;
+  return Math.max(0, m);
+}
+function parseDate(v) {
+  if (v == null || v === '' || v === '-' || v === 0) return null;
+  if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  if (typeof v === 'number') {
+    const d = XLSX.SSF.parse_date_code(v);
+    return d ? new Date(d.y, d.m - 1, d.d) : null;
+  }
+  const s = String(v).trim().replace(/[./]/g, '-');
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  return null;
+}
+function isoDate(v) { const d = parseDate(v); return d ? fmtDate(d) : ''; }
+function fmtDate(d) {
+  if (!d) return '-';
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+// ExcelJS는 UTC 기준으로 날짜를 기록하므로 UTC Date로 변환해야 시트에 그대로 표시됨
+function xlDate(d) { return d ? new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) : null; }
+function round2(n) { return Math.round(n * 100) / 100; }
+
+/* ===================== 상수 (휴가대장 수식과 동일) ===================== */
+const LAW_DATE = new Date(2017, 4, 30); // 2017-05-30
+const ALL_CATS = ['연차', '월차', '반차', '여름휴가', '병가', '예비군', '민방위', '경조휴가', '특별휴가'];
+const ALL_EXCLUDE = ['대체휴무(반차)', '대체휴무(연차)', '무급휴가', '만료된 연차'];
+const YEAR_CATS = ['연차', '월차', '반차', '여름휴가', '병가', '예비군', '민방위', '경조휴가',
+  '대체휴무(반차)', '대체휴무(연차)', '무급휴가', '만료된 연차', '특별휴가'];
+const KNOWN_KINDS = new Set([...ALL_CATS, ...ALL_EXCLUDE]);
+
+/* ===================== 입력 파일 파싱 ===================== */
+function sheetToRows(ws, requiredHeaders) {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+  let hdrIdx = -1; const colMap = {};
+  for (let i = 0; i < Math.min(10, aoa.length); i++) {
+    const cells = (aoa[i] || []).map(v => v == null ? '' : String(v).trim());
+    if (requiredHeaders.every(h => cells.includes(h))) {
+      hdrIdx = i;
+      cells.forEach((h, c) => { if (h && !(h in colMap)) colMap[h] = c; });
+      break;
+    }
+  }
+  if (hdrIdx < 0) return null;
+  const rows = [];
+  for (let i = hdrIdx + 1; i < aoa.length; i++) {
+    const r = aoa[i] || []; const obj = {};
+    for (const h in colMap) obj[h] = (r[colMap[h]] !== undefined) ? r[colMap[h]] : null;
+    rows.push(obj);
+  }
+  return rows;
+}
+function findRows(wb, requiredHeaders) {
+  for (const name of wb.SheetNames) {
+    const rows = sheetToRows(wb.Sheets[name], requiredHeaders);
+    if (rows) return rows;
+  }
+  return null;
+}
+const txt = v => (v == null || v === 0) ? '' : String(v).trim();
+function parsePeople(rows) {
+  return rows
+    .filter(r => txt(r['성명']) !== '')
+    .map(r => ({
+      name: txt(r['성명']),
+      status: txt(r['재직여부']),
+      dept: txt(r['근무지']),
+      hire: isoDate(r['입사일']),
+      leave: isoDate(r['퇴사일'])
+    }));
+}
+function parseVacations(rows) {
+  return rows
+    .filter(r => txt(r['휴가구분']) !== '')
+    .map(r => ({
+      year: r['YEAR'] != null && String(r['YEAR']).trim() !== '' ? String(parseInt(r['YEAR'], 10)) : '',
+      apply: isoDate(r['신청일']),
+      name: txt(r['성명']),
+      dept: txt(r['근무지']),
+      kind: txt(r['휴가구분']),
+      start: isoDate(r['시작일']),
+      end: isoDate(r['마지막일']),
+      days: r['사용일'] != null && String(r['사용일']).trim() !== '' ? String(parseFloat(r['사용일']) || 0) : '0',
+      note: r['비고'] != null ? String(r['비고']).trim() : ''
+    }));
+}
+// 계산용 정규화: YEAR가 비면 신청일(없으면 시작일)에서 연도 추출
+function normVac(v) {
+  let y = parseInt(v.year, 10);
+  if (!y || isNaN(y)) {
+    const d = parseDate(v.apply) || parseDate(v.start);
+    y = d ? d.getFullYear() : null;
+  }
+  return { ...v, yearN: y, daysN: parseFloat(v.days) || 0 };
+}
+
+/* ===================== 핵심 계산 (수식과 1:1 검증 완료) ===================== */
+function calcPerson(p, vacs, year, calcDate) {
+  const mine = vacs.filter(v => v.name === p.name);
+  const sumAll = k => mine.filter(v => v.kind === k).reduce((a, v) => a + v.daysN, 0);
+  const sumYr = k => mine.filter(v => v.kind === k && v.yearN === year).reduce((a, v) => a + v.daysN, 0);
+  const totalAll = mine.reduce((a, v) => a + v.daysN, 0);
+  const totalYr = mine.filter(v => v.yearN === year).reduce((a, v) => a + v.daysN, 0);
+
+  const hire = parseDate(p.hire), leave = parseDate(p.leave);
+  const endD = leave ? new Date(Math.min(leave, calcDate)) : calcDate;
+  const yrs = hire ? datedifY(hire, endD) : 0;
+
+  let accAnnual = 0;
+  for (let k = 1; k <= yrs; k++) accAnnual += Math.min(25, 15 + Math.floor((k - 1) / 2));
+
+  const allVals = ALL_CATS.map(sumAll);
+  const otherAll = totalAll - allVals.reduce((a, b) => a + b, 0) - ALL_EXCLUDE.reduce((a, k) => a + sumAll(k), 0);
+  const usedAnnualAcc = allVals[0] + allVals[2] + allVals[3]; // 연차+반차+여름휴가
+  const settleAnnual = accAnnual - usedAnnualAcc;
+
+  let monthly = 0;
+  if (hire && !(hire > calcDate) && !(hire < LAW_DATE)) {
+    const cap = new Date(Math.min(calcDate, addMonths(hire, 12)));
+    monthly = Math.min(11, datedifM(hire, cap));
+  }
+  const usedMonthlyAll = allVals[1];
+  const settleMonthly = monthly - usedMonthlyAll;
+  const settleTotal = settleAnnual + settleMonthly;
+
+  let yrAnnual = 0;
+  if (hire) {
+    const n = year - hire.getFullYear();
+    yrAnnual = n < 1 ? 0 : Math.min(25, 15 + Math.floor((n - 1) / 2));
+  }
+  let yrMonthly = 0;
+  if (hire && !(hire < LAW_DATE)) {
+    for (let k = 1; k <= 11; k++) if (addMonths(hire, k).getFullYear() === year) yrMonthly++;
+  }
+
+  const yrVals = YEAR_CATS.map(sumYr);
+  const otherYr = totalYr - yrVals.reduce((a, b) => a + b, 0);
+  const usedAnnualYr = yrVals[0] + yrVals[2] + yrVals[3];
+  const usedMonthlyYr = yrVals[1];
+
+  return {
+    name: p.name, status: p.status, dept: p.dept, hire, leave,
+    vals: [yrs, accAnnual, round2(usedAnnualAcc), round2(settleAnnual),
+      monthly, round2(usedMonthlyAll), round2(settleMonthly), round2(settleTotal),
+      ...allVals.map(round2), round2(otherAll),
+      yrAnnual, yrMonthly, round2(usedAnnualYr), round2(usedMonthlyYr),
+      ...yrVals.map(round2), round2(otherYr)]
+  };
+}
+
+/* ===================== ExcelJS 서식 (원본 시트에서 추출) ===================== */
+const F = { GRAY: 'FFD9D9D9', ORANGE: 'FFFBE5D6', YELLOW: 'FFFFF2CC', BLUE: 'FFDEEBF7', GREEN: 'FFE2EFDA', GREEN2: 'FFDAF2D0', WHITE: 'FFFFFFFF' };
+const NF_DATE = 'mm-dd-yy';
+const NF_INT = '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
+const NF_DEC = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"_-;_-@_-';
+const FONT = { name: '맑은 고딕', size: 11 };
+const FONT_B = { name: '맑은 고딕', size: 11, bold: true };
+const FONT_RED = { name: '맑은 고딕', size: 11, bold: true, color: { argb: 'FFFF0000' } };
+const THIN = { style: 'thin' };
+const BORDER = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+const CENTER = { horizontal: 'center', vertical: 'center' };
+
+// 열별 채우기 (1=A ... 42=AP)
+function fillForCol(c, isHeader) { // isHeader: 2~4행 / false: 데이터행
+  if (c === 1) return isHeader ? F.GRAY : F.WHITE;
+  if (c === 2) return F.ORANGE;                    // 이름
+  if (c >= 3 && c <= 7) return isHeader ? F.GRAY : null;   // 기본사항
+  if (c >= 8 && c <= 10) return F.YELLOW;          // 정산시점
+  if (c >= 11 && c <= 13) return F.BLUE;           // 정산월차
+  if (c === 14) return F.ORANGE;                   // 정산합계
+  if (c >= 15 && c <= 24) return isHeader ? F.GRAY : null; // 전체내역
+  if (c >= 25 && c <= 28) return F.BLUE;           // 발생연차/월차·사용연차/월차
+  if (c >= 29 && c <= 41) return F.GREEN;          // 연도내역
+  if (c === 42) return F.GREEN2;                   // 연도 기타휴가
+  return null;
+}
+function setCell(ws, r, c, value, opt) {
+  const cell = ws.getCell(r, c);
+  if (value !== undefined && value !== null) cell.value = value;
+  cell.font = (opt && opt.font) || FONT;
+  cell.border = BORDER;
+  cell.alignment = CENTER;
+  const fill = (opt && 'fill' in opt) ? opt.fill : null;
+  if (fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+  if (opt && opt.numFmt) cell.numFmt = opt.numFmt;
+  return cell;
+}
+
+/* ===================== 휴가대장(YYYY) 시트 생성 ===================== */
+function calcDateFor(year) {
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (year < t.getFullYear()) return new Date(year, 11, 31);
+  if (year === t.getFullYear()) return t;
+  return new Date(year, 0, 1);
+}
+function buildLedgerSheet(wbx, people, vacs, year) {
+  const ws = wbx.addWorksheet('휴가대장(' + year + ')');
+  const calcDate = calcDateFor(year);
+
+  // 2~3행: 기준일 + 그룹 헤더
+  const groups = [[3, 7, '기본사항', F.GRAY], [8, 10, '정산시점', F.YELLOW], [11, 13, '정산월차', F.BLUE],
+    [14, 14, '정산합계', F.ORANGE], [15, 23, '전체내역', F.GRAY], [29, 41, year + '년도 내역', F.GREEN]];
+  for (const r of [2, 3]) {
+    setCell(ws, r, 1, r === 2 ? '부여기준일' : '정산기준일', { font: FONT_RED, fill: F.GRAY });
+    setCell(ws, r, 2, xlDate(r === 2 ? new Date(year, 0, 1) : calcDate), { font: FONT_RED, numFmt: NF_DATE });
+    for (let c = 3; c <= 42; c++) setCell(ws, r, c, null, { fill: fillForCol(c, true) });
+    for (const [s, e, label] of groups) {
+      ws.getCell(r, s).value = label;
+      ws.mergeCells(r, s, r, e);
+      ws.getCell(r, s).font = FONT_B;
+    }
+  }
+
+  // 4행: 컬럼 헤더
+  const hdr = ['No.', '이름', '구분1', '소속', '입사일', '퇴사일', '근속년수',
+    '누적연차', '누적사용 연차일수', '정산연차', '2018개정월차', '사용월차', '정산월차', '정산합계',
+    '연차', '월차', '반차', '여름휴가', '병가', '예비군', '민방위', '경조휴가', '특별휴가', '기타휴가',
+    year + '년 발생연차', year + '년발생월차', '사용연차', '사용월차',
+    '연차', '월차', '반차', '여름휴가', '병가', '예비군', '민방위', '경조휴가',
+    '대체휴무(반차)', '대체휴무(연차)', '무급휴가', '만료된 연차', '특별휴가', '기타휴가'];
+  hdr.forEach((h, i) => setCell(ws, 4, i + 1, h, { font: FONT_B, fill: fillForCol(i + 1, true) }));
+
+  // 데이터 행
+  people.forEach((p, i) => {
+    const r = 5 + i;
+    const o = calcPerson(p, vacs, year, calcDate);
+    setCell(ws, r, 1, i + 1, { fill: F.WHITE });
+    setCell(ws, r, 2, o.name, { fill: F.ORANGE });
+    setCell(ws, r, 3, o.status, {});
+    setCell(ws, r, 4, o.dept, {});
+    setCell(ws, r, 5, o.hire ? xlDate(o.hire) : '-', { numFmt: NF_DATE });
+    setCell(ws, r, 6, o.leave ? xlDate(o.leave) : '-', { numFmt: NF_DATE });
+    o.vals.forEach((v, j) => {
+      const c = 7 + j;
+      setCell(ws, r, c, v, { fill: fillForCol(c, false), numFmt: c === 7 ? NF_INT : NF_DEC });
+    });
+  });
+
+  // 열 너비 (원본과 동일)
+  const widths = { 1: 12, 2: 13.2, 4: 30.3, 5: 11.1, 9: 19, 11: 14.8, 25: 15.2, 26: 13.8, 37: 15.5, 39: 10, 40: 12.8 };
+  for (const c in widths) ws.getColumn(+c).width = widths[c];
+  return ws;
+}
+
+/* ===================== 기타휴가(YYYY) 시트 생성 ===================== */
+function buildEtcSheet(wbx, vacs, year) {
+  const ws = wbx.addWorksheet('기타휴가(' + year + ')');
+  const hdr = ['YEAR', '신청일', '성명', '근무지', '휴가구분', '시작일', '마지막일', '사용일', '비고'];
+  hdr.forEach((h, i) => setCell(ws, 1, i + 1, h, { font: FONT_B, fill: F.GRAY }));
+  setCell(ws, 1, 11, '사용일 합계', { font: FONT_B, fill: F.GRAY });
+
+  // 원본 수식과 동일: 휴가구분이 13개 표준 구분(연도내역 헤더)에 없는 기록
+  const rows = vacs.filter(v => v.yearN === year && !YEAR_CATS.includes(v.kind));
+  let total = 0;
+  rows.forEach((v, i) => {
+    const r = 2 + i;
+    setCell(ws, r, 1, v.yearN, {});
+    setCell(ws, r, 2, parseDate(v.apply) ? xlDate(parseDate(v.apply)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 3, v.name, {});
+    setCell(ws, r, 4, v.dept, {});
+    setCell(ws, r, 5, v.kind, {});
+    setCell(ws, r, 6, parseDate(v.start) ? xlDate(parseDate(v.start)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 7, parseDate(v.end) ? xlDate(parseDate(v.end)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 8, v.daysN, {});
+    setCell(ws, r, 9, v.note, {});
+    total += v.daysN;
+  });
+  setCell(ws, 2, 11, round2(total), {});
+
+  const widths = { 1: 6.7, 2: 10.8, 3: 6.7, 4: 10.4, 5: 22.3, 6: 10.8, 7: 10.8, 8: 7.7, 9: 26.8, 11: 12.1 };
+  for (const c in widths) ws.getColumn(+c).width = widths[c];
+  return ws;
+}
+
+/* ===================== 양식/DB 다운로드 ===================== */
+async function downloadWb(wbx, fname) {
+  const buf = await wbx.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function makePeopleWb(rows, withGuide) {
+  const wbx = new ExcelJS.Workbook();
+  const ws = wbx.addWorksheet('인원DB');
+  ['no', '성명', '재직여부', '근무지', '입사일', '퇴사일'].forEach((h, i) =>
+    setCell(ws, 1, i + 1, h, { font: FONT_B, fill: F.GRAY }));
+  rows.forEach((p, i) => {
+    const r = 2 + i;
+    setCell(ws, r, 1, i + 1, {});
+    setCell(ws, r, 2, p.name, {});
+    setCell(ws, r, 3, p.status, {});
+    setCell(ws, r, 4, p.dept, {});
+    setCell(ws, r, 5, parseDate(p.hire) ? xlDate(parseDate(p.hire)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 6, parseDate(p.leave) ? xlDate(parseDate(p.leave)) : '-', { numFmt: NF_DATE });
+  });
+  [5, 12, 10, 28, 12, 12].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  if (withGuide) {
+    const g = wbx.addWorksheet('작성 안내');
+    [['인원DB 작성 안내'], [''],
+     ['성명', '휴가DB의 성명과 정확히 같아야 집계됩니다.'],
+     ['재직여부', '예: 재직중 / 퇴사'],
+     ['입사일', '날짜 형식 (예: 2020-03-02)'],
+     ['퇴사일', '재직 중이면 - 또는 빈칸']].forEach((row, i) => row.forEach((v, c) => {
+      const cell = g.getCell(i + 1, c + 1); cell.value = v; cell.font = i === 0 ? FONT_B : FONT;
+    }));
+    g.getColumn(1).width = 12; g.getColumn(2).width = 50;
+  }
+  return wbx;
+}
+function makeVacWb(rows, withGuide) {
+  const wbx = new ExcelJS.Workbook();
+  const ws = wbx.addWorksheet('휴가DB');
+  ['YEAR', '신청일', '성명', '근무지', '휴가구분', '시작일', '마지막일', '사용일', '비고'].forEach((h, i) =>
+    setCell(ws, 1, i + 1, h, { font: FONT_B, fill: F.GRAY }));
+  rows.forEach((v, i) => {
+    const r = 2 + i;
+    const nv = normVac(v);
+    setCell(ws, r, 1, nv.yearN || '', {});
+    setCell(ws, r, 2, parseDate(v.apply) ? xlDate(parseDate(v.apply)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 3, v.name, {});
+    setCell(ws, r, 4, v.dept, {});
+    setCell(ws, r, 5, v.kind, {});
+    setCell(ws, r, 6, parseDate(v.start) ? xlDate(parseDate(v.start)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 7, parseDate(v.end) ? xlDate(parseDate(v.end)) : '', { numFmt: NF_DATE });
+    setCell(ws, r, 8, nv.daysN, {});
+    setCell(ws, r, 9, v.note, {});
+  });
+  [7, 11, 8, 11, 20, 11, 11, 8, 28].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  if (withGuide) {
+    const g = wbx.addWorksheet('휴가구분 안내');
+    const guide = [
+      ['휴가구분', '집계 방식'], 
+      ['연차 / 반차 / 여름휴가', '연차에서 차감'],
+      ['월차', '월차에서 차감 (2017.5.30 이후 입사자)'],
+      ['병가 / 예비군 / 민방위 / 경조휴가 / 특별휴가', '별도 항목으로 집계'],
+      ['대체휴무(반차) / 대체휴무(연차) / 무급휴가 / 만료된 연차', '연도별 내역에만 표시'],
+      ['그 외 모든 구분', '기타휴가로 집계 + 기타휴가 리스트에 표시'],
+      [''],
+      ['사용일', '하루=1, 반차=0.5 형태의 숫자'],
+      ['YEAR', '비워두면 신청일의 연도가 자동 적용됩니다']];
+    guide.forEach((row, i) => row.forEach((v, c) => {
+      const cell = g.getCell(i + 1, c + 1); cell.value = v;
+      cell.font = i === 0 ? FONT_B : FONT;
+      if (i === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: F.GRAY } };
+    }));
+    g.getColumn(1).width = 48; g.getColumn(2).width = 42;
+  }
+  return wbx;
+}
+
+/* ===================== 상태 & 편집 화면 ===================== */
+const state = { people: null, vacs: null, years: [], selected: new Set() };
+
+function setupDrop(dropId, inputId, fnameId, onFile) {
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const fname = document.getElementById(fnameId);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files.length) handle(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files.length) handle(input.files[0]); });
+  function handle(file) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        // cellDates를 끄고 일련번호로 받아 SSF로 파싱 → 시간대 영향 없음
+        const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
+        if (onFile(wb)) { drop.classList.add('done'); fname.textContent = '✓ ' + file.name; }
+        else { drop.classList.remove('done'); fname.textContent = ''; }
+      } catch (err) { alert('파일을 읽지 못했습니다: ' + err.message); }
+      refresh();
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+setupDrop('dropPeople', 'filePeople', 'fnamePeople', wb => {
+  const rows = findRows(wb, ['성명', '입사일']);
+  if (!rows) { alert('이 파일에서 인원DB 양식(성명·입사일 헤더)을 찾지 못했습니다.'); return false; }
+  state.people = parsePeople(rows);
+  renderPeople();
+  return true;
+});
+setupDrop('dropVac', 'fileVac', 'fnameVac', wb => {
+  const rows = findRows(wb, ['성명', '휴가구분', '사용일']);
+  if (!rows) { alert('이 파일에서 휴가DB 양식(성명·휴가구분·사용일 헤더)을 찾지 못했습니다.'); return false; }
+  state.vacs = parseVacations(rows);
+  renderVacs();
+  return true;
+});
+
+/* ----- 탭 ----- */
+document.getElementById('tabPeople').onclick = () => switchTab(true);
+document.getElementById('tabVac').onclick = () => switchTab(false);
+function switchTab(people) {
+  document.getElementById('tabPeople').classList.toggle('on', people);
+  document.getElementById('tabVac').classList.toggle('on', !people);
+  document.getElementById('panePeople').style.display = people ? '' : 'none';
+  document.getElementById('paneVac').style.display = people ? 'none' : '';
+}
+
+/* ----- 인원DB 편집 테이블 ----- */
+function mkInput(value, onchange, type) {
+  const inp = document.createElement('input');
+  inp.type = type || 'text';
+  inp.value = value;
+  inp.addEventListener('change', () => { onchange(inp.value.trim()); refreshDerived(); });
+  return inp;
+}
+function renderPeople() {
+  const tbody = document.querySelector('#tblPeople tbody');
+  tbody.innerHTML = '';
+  (state.people || []).forEach((p, i) => {
+    const tr = document.createElement('tr');
+    const tdNo = document.createElement('td'); tdNo.style.textAlign = 'center'; tdNo.textContent = i + 1; tr.appendChild(tdNo);
+    [['name'], ['status'], ['dept'], ['hire'], ['leave']].forEach(([key]) => {
+      const td = document.createElement('td');
+      td.appendChild(mkInput(p[key], v => p[key] = v));
+      tr.appendChild(td);
+    });
+    const tdDel = document.createElement('td');
+    const del = document.createElement('button'); del.className = 'del-btn'; del.textContent = '✕';
+    del.title = '이 인원 삭제';
+    del.onclick = () => { if (confirm(p.name + ' 행을 삭제할까요?')) { state.people.splice(i, 1); renderPeople(); refreshDerived(); } };
+    tdDel.appendChild(del); tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  });
+}
+document.getElementById('addPeople').onclick = () => {
+  if (!state.people) state.people = [];
+  state.people.push({ name: '', status: '재직중', dept: '', hire: '', leave: '' });
+  renderPeople(); refreshDerived();
+  const rows = document.querySelectorAll('#tblPeople tbody tr');
+  rows[rows.length - 1].querySelector('input').focus();
+};
+
+/* ----- 휴가DB 편집 테이블 ----- */
+const VAC_KEYS = ['year', 'apply', 'name', 'dept', 'kind', 'start', 'end', 'days', 'note'];
+function renderVacs() {
+  const tbody = document.querySelector('#tblVac tbody');
+  const q = document.getElementById('vacSearch').value.trim().toLowerCase();
+  tbody.innerHTML = '';
+  let shown = 0;
+  (state.vacs || []).forEach((v, i) => {
+    if (q && !(v.name.toLowerCase().includes(q) || v.year.includes(q) || v.kind.toLowerCase().includes(q))) return;
+    shown++;
+    const tr = document.createElement('tr');
+    VAC_KEYS.forEach(key => {
+      const td = document.createElement('td');
+      const inp = mkInput(v[key], val => v[key] = val);
+      if (key === 'days' || key === 'year') td.className = 'num';
+      if (key === 'kind') inp.setAttribute('list', 'kindList');
+      td.appendChild(inp);
+      tr.appendChild(td);
+    });
+    const tdDel = document.createElement('td');
+    const del = document.createElement('button'); del.className = 'del-btn'; del.textContent = '✕';
+    del.title = '이 기록 삭제';
+    del.onclick = () => { state.vacs.splice(i, 1); renderVacs(); refreshDerived(); };
+    tdDel.appendChild(del); tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  });
+  document.getElementById('vacCount').textContent =
+    q ? shown + '건 표시 / 전체 ' + state.vacs.length + '건' : '전체 ' + (state.vacs ? state.vacs.length : 0) + '건';
+  // 휴가구분 자동완성 목록
+  const dl = document.getElementById('kindList');
+  dl.innerHTML = '';
+  [...KNOWN_KINDS].forEach(k => { const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
+}
+document.getElementById('vacSearch').addEventListener('input', renderVacs);
+document.getElementById('addVac').onclick = () => {
+  if (!state.vacs) state.vacs = [];
+  const today = fmtDate(new Date());
+  state.vacs.push({ year: String(new Date().getFullYear()), apply: today, name: '', dept: '', kind: '연차', start: today, end: today, days: '1', note: '' });
+  document.getElementById('vacSearch').value = '';
+  renderVacs(); refreshDerived();
+  const rows = document.querySelectorAll('#tblVac tbody tr');
+  rows[rows.length - 1].querySelectorAll('input')[2].focus();
+};
+
+/* ----- 수정한 DB 내려받기 ----- */
+document.getElementById('dlPeople').onclick = () => { if (state.people) downloadWb(makePeopleWb(state.people, false), '인원DB.xlsx'); };
+document.getElementById('dlVac').onclick = () => { if (state.vacs) downloadWb(makeVacWb(state.vacs, false), '휴가DB.xlsx'); };
+/* ----- 빈 양식 내려받기 ----- */
+document.getElementById('tplPeople').onclick = () =>
+  downloadWb(makePeopleWb([{ name: '홍길동', status: '재직중', dept: '본사', hire: '2020-03-02', leave: '-' }], true), '인원DB_양식.xlsx');
+document.getElementById('tplVac').onclick = () =>
+  downloadWb(makeVacWb([{ year: '2026', apply: '2026-06-01', name: '홍길동', dept: '본사', kind: '연차', start: '2026-06-01', end: '2026-06-02', days: '2', note: '' }], true), '휴가DB_양식.xlsx');
+
+/* ===================== 요약/경고/연도 갱신 ===================== */
+function refresh() {
+  if (state.people && state.vacs) document.getElementById('editStep').style.display = '';
+  refreshDerived();
+}
+function refreshDerived() {
+  scheduleSave(); // 데이터 변경 시 자동 저장
+  const summary = document.getElementById('summary');
+  const warnbox = document.getElementById('warnbox');
+  const chips = document.getElementById('yearChips');
+  const tools = document.getElementById('yearTools');
+
+  if (state.people && state.vacs) {
+    const nv = state.vacs.map(normVac);
+    summary.style.display = 'block';
+    summary.innerHTML = '인원 <b>' + state.people.length + '명</b> · 휴가기록 <b>' + state.vacs.length + '건</b>을 읽었습니다.';
+
+    const unknownKinds = {};
+    nv.forEach(v => { if (v.kind && !KNOWN_KINDS.has(v.kind)) unknownKinds[v.kind] = (unknownKinds[v.kind] || 0) + 1; });
+    const names = new Set(state.people.map(p => p.name));
+    const orphan = new Set(nv.filter(v => v.name && !names.has(v.name)).map(v => v.name));
+    const warns = [];
+    if (Object.keys(unknownKinds).length)
+      warns.push('<b>기타휴가로 집계되는 휴가구분:</b> ' + Object.entries(unknownKinds).map(([k, n]) => k + ' (' + n + '건)').join(', '));
+    if (orphan.size)
+      warns.push('<b>인원DB에 없는 성명</b>(대장에 표시되지 않음): ' + [...orphan].join(', '));
+    warnbox.style.display = warns.length ? 'block' : 'none';
+    warnbox.innerHTML = warns.join('<br>');
+
+    const thisYear = new Date().getFullYear();
+    const yearSet = new Set(nv.map(v => v.yearN).filter(y => y && y > 1990 && y < 2200));
+    yearSet.add(thisYear);
+    const newYears = [...yearSet].sort((a, b) => b - a);
+    const firstTime = state.years.length === 0;
+    state.years = newYears;
+    if (firstTime) {
+      if (Array.isArray(state.pendingSelected) && state.pendingSelected.length) {
+        state.pendingSelected.forEach(y => { if (yearSet.has(y)) state.selected.add(y); });
+        state.pendingSelected = null;
+      } else newYears.forEach(y => state.selected.add(y));
+    }
+    state.selected = new Set([...state.selected].filter(y => yearSet.has(y)));
+
+    chips.innerHTML = '';
+    state.years.forEach(y => {
+      const el = document.createElement('span');
+      el.className = 'year-chip' + (state.selected.has(y) ? ' on' : '');
+      el.textContent = y;
+      el.onclick = () => {
+        if (state.selected.has(y)) state.selected.delete(y); else state.selected.add(y);
+        el.classList.toggle('on'); updateGen();
+      };
+      chips.appendChild(el);
+    });
+    tools.style.display = 'flex';
+  }
+  updateGen();
+}
+document.getElementById('selAll').onclick = () => { state.years.forEach(y => state.selected.add(y)); refreshDerived(); };
+document.getElementById('selNone').onclick = () => { state.selected.clear(); refreshDerived(); };
+
+function updateGen() {
+  const btn = document.getElementById('genBtn');
+  const msg = document.getElementById('genMsg');
+  const ready = state.people && state.vacs && state.selected.size > 0;
+  btn.disabled = !ready;
+  msg.className = '';
+  if (ready) {
+    const ys = [...state.selected].sort((a, b) => b - a);
+    msg.textContent = ys.map(y => '휴가대장(' + y + ')').join(', ')
+      + (document.getElementById('withEtc').checked ? ' + 기타휴가 시트' : '') + ' 가 생성됩니다.';
+  } else if (state.people && state.vacs) msg.textContent = '연도를 1개 이상 선택해 주세요.';
+  else msg.textContent = '파일 2개를 올리고 연도를 선택하면 버튼이 활성화됩니다.';
+}
+document.getElementById('withEtc').addEventListener('change', updateGen);
+
+/* ===================== 로컬 자동 저장 / 백업 / 복원 ===================== */
+const STORAGE_KEY = 'vacation-ledger-data-v1';
+let storageOk = false;
+try { // 일부 환경(미리보기·보안설정)에서는 브라우저 저장이 막혀 있음
+  const t = '__test__' + Date.now();
+  localStorage.setItem(t, '1'); localStorage.removeItem(t);
+  storageOk = true;
+} catch (e) { storageOk = false; }
+
+let saveTimer = null;
+function scheduleSave() {
+  if (!storageOk || (!state.people && !state.vacs)) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveLocal, 400);
+}
+function saveLocal() {
+  if (!storageOk) return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      v: 1, savedAt: new Date().toISOString(),
+      people: state.people, vacs: state.vacs,
+      selected: [...state.selected]
+    }));
+    setStorageMsg(true, '자동 저장됨 · ' + new Date().toLocaleTimeString('ko-KR'));
+  } catch (e) {
+    setStorageMsg(false, '저장 실패: ' + e.message + ' (백업 내려받기를 이용하세요)');
+  }
+}
+function setStorageMsg(ok, msg) {
+  const dot = document.getElementById('storageDot');
+  dot.className = 'storage-dot ' + (ok ? 'on' : 'off');
+  document.getElementById('storageMsg').textContent = msg;
+}
+function applyData(data, sourceLabel) {
+  if (!Array.isArray(data.people) && !Array.isArray(data.vacs)) throw new Error('데이터 형식이 올바르지 않습니다');
+  state.people = Array.isArray(data.people) ? data.people : null;
+  state.vacs = Array.isArray(data.vacs) ? data.vacs : null;
+  state.years = []; state.selected = new Set();
+  if (Array.isArray(data.selected)) state.pendingSelected = data.selected;
+  if (state.people) {
+    renderPeople();
+    document.getElementById('dropPeople').classList.add('done');
+    document.getElementById('fnamePeople').textContent = '✓ ' + sourceLabel;
+  }
+  if (state.vacs) {
+    renderVacs();
+    document.getElementById('dropVac').classList.add('done');
+    document.getElementById('fnameVac').textContent = '✓ ' + sourceLabel;
+  }
+  refresh();
+}
+function loadLocal() {
+  if (!storageOk) {
+    setStorageMsg(false, '이 환경에서는 브라우저 저장이 지원되지 않습니다. 파일을 PC에 받아 직접 열면 자동 저장이 동작합니다. (백업/복원은 사용 가능)');
+    return;
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) { setStorageMsg(true, '자동 저장 켜짐 — 파일을 올리면 이 브라우저에 저장되어 다음에 자동으로 불러옵니다.'); return; }
+    const data = JSON.parse(raw);
+    applyData(data, '저장된 데이터');
+    const when = data.savedAt ? new Date(data.savedAt).toLocaleString('ko-KR') : '';
+    setStorageMsg(true, '저장된 데이터를 불러왔습니다 (마지막 저장: ' + when + ')');
+  } catch (e) {
+    setStorageMsg(false, '저장된 데이터를 읽지 못했습니다: ' + e.message);
+  }
+}
+/* ----- 백업 내려받기 ----- */
+document.getElementById('backupBtn').onclick = () => {
+  if (!state.people && !state.vacs) { alert('백업할 데이터가 없습니다. 먼저 파일을 올려 주세요.'); return; }
+  const payload = JSON.stringify({
+    v: 1, savedAt: new Date().toISOString(),
+    people: state.people, vacs: state.vacs, selected: [...state.selected]
+  }, null, 1);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const t = new Date(); const p = n => String(n).padStart(2, '0');
+  a.download = '휴가대장_백업_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+/* ----- 백업 복원 ----- */
+document.getElementById('restoreBtn').onclick = () => document.getElementById('restoreFile').click();
+document.getElementById('restoreFile').addEventListener('change', function () {
+  if (!this.files.length) return;
+  const file = this.files[0];
+  if ((state.people || state.vacs) && !confirm('현재 데이터를 백업 파일의 내용으로 덮어쓸까요?')) { this.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      applyData(JSON.parse(ev.target.result), file.name);
+      saveLocal();
+      alert('백업을 복원했습니다.');
+    } catch (e) { alert('복원 실패: ' + e.message); }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+/* ----- 저장 데이터 초기화 ----- */
+document.getElementById('clearBtn').onclick = () => {
+  if (!confirm('브라우저에 저장된 데이터를 모두 지우고 처음 상태로 돌아갈까요?\n(백업 JSON 파일은 영향을 받지 않습니다)')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  location.reload();
+};
+
+/* ===================== 사용 설명서 드로어 ===================== */
+const drawer = document.getElementById('drawer');
+const overlay = document.getElementById('drawerOverlay');
+function setDrawer(open) {
+  drawer.classList.toggle('open', open);
+  overlay.classList.toggle('open', open);
+}
+document.getElementById('manualBtn').onclick = () => setDrawer(true);
+document.getElementById('drawerClose').onclick = () => setDrawer(false);
+overlay.onclick = () => setDrawer(false);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
+
+/* ===================== 시작 시 저장 데이터 복원 ===================== */
+loadLocal();
+
+document.getElementById('genBtn').onclick = async () => {
+  const msg = document.getElementById('genMsg');
+  try {
+    msg.className = ''; msg.textContent = '생성 중...';
+    const people = state.people.filter(p => p.name);
+    const vacs = state.vacs.map(normVac);
+    const withEtc = document.getElementById('withEtc').checked;
+    const wbx = new ExcelJS.Workbook();
+    const years = [...state.selected].sort((a, b) => b - a);
+    for (const y of years) {
+      buildLedgerSheet(wbx, people, vacs, y);
+      if (withEtc) buildEtcSheet(wbx, vacs, y);
+    }
+    const t = new Date(); const p = n => String(n).padStart(2, '0');
+    const fname = '휴가대장_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '.xlsx';
+    await downloadWb(wbx, fname);
+    msg.className = 'ok';
+    msg.textContent = fname + ' 다운로드 완료 (' + (years.length * (withEtc ? 2 : 1)) + '개 시트)';
+  } catch (err) {
+    msg.className = 'err';
+    msg.textContent = '생성 실패: ' + err.message;
+    console.error(err);
+  }
+};
+</script>
+</body>
+</html>
