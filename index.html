@@ -91,6 +91,13 @@
   .del-btn:hover { color: var(--err); }
   .add-row { margin-top: 10px; }
 
+  /* 휴가내역 합계 테이블 */
+  table.sum td { padding: 7px 8px; text-align: right; white-space: nowrap; }
+  table.sum td:first-child, table.sum td:nth-child(2) { text-align: center; }
+  table.sum tr.person-first td { border-top: 2px solid var(--line); }
+  table.sum tr.total-row td { background: var(--accent-soft); font-weight: 700; }
+  table.sum td.zero { color: #c2bfb4; }
+
   .years { display: flex; flex-wrap: wrap; gap: 8px; }
   .year-chip {
     padding: 8px 16px; border-radius: 999px; border: 1.5px solid var(--line);
@@ -238,6 +245,7 @@
     <div class="tabs">
       <div class="tab on" id="tabPeople">인원DB</div>
       <div class="tab" id="tabVac">휴가DB</div>
+      <div class="tab" id="tabSum">휴가내역 합계</div>
     </div>
 
     <div id="panePeople">
@@ -263,6 +271,20 @@
       </div>
       <button class="btn-sub add-row" id="addVac">＋ 휴가기록 추가</button>
       <datalist id="kindList"></datalist>
+    </div>
+
+    <div id="paneSum" style="display:none">
+      <div class="editor-tools">
+        <input type="search" id="sumSearch" placeholder="이름 검색 (비우면 전체)">
+        <span class="count" id="sumCount"></span>
+      </div>
+      <div class="tbl-scroll">
+        <table class="edit sum" id="tblSum">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="note">오늘 기준 · 전체 기간 합계입니다. <b>발생</b> = 누적연차 + 2018개정월차 · <b>사용</b> = 누적사용 연차일수(연차+반차+여름휴가) + 사용월차 · <b>잔여</b> = 발생 − 사용 (휴가대장의 정산합계와 동일). 조회 전용 — 수정은 인원DB/휴가DB 탭에서 해주세요.</div>
     </div>
     <div class="note">수정 내용은 이 화면에만 유지됩니다. 다음에 이어서 쓰려면 <b>수정한 인원DB/휴가DB 내려받기</b>로 저장한 파일을 다음번에 다시 올려 주세요.</div>
   </section>
@@ -327,6 +349,7 @@
       <li>셀을 클릭해 바로 수정합니다. 수정 즉시 자동 저장됩니다.</li>
       <li><b>＋ 추가</b> 버튼으로 인원/휴가기록을 추가, 행 끝 <b>✕</b>로 삭제합니다.</li>
       <li>휴가DB 탭의 검색창에서 성명·연도·휴가구분으로 찾을 수 있습니다.</li>
+      <li><b>휴가내역 합계</b> 탭 — 사람별 발생연차·사용연차·잔여연차 총계를 오늘 기준으로 보여줍니다. 이름으로 검색할 수 있고, 엑셀 생성 시 '휴가내역' 시트로도 함께 들어갑니다.</li>
       <li><b>수정한 인원DB/휴가DB 내려받기</b>로 엑셀 파일로도 보관할 수 있습니다.</li>
     </ul>
 
@@ -641,7 +664,9 @@ function buildEtcSheet(wbx, vacs, year) {
   setCell(ws, 1, 11, '사용일 합계', { font: FONT_B, fill: F.GRAY });
 
   // 원본 수식과 동일: 휴가구분이 13개 표준 구분(연도내역 헤더)에 없는 기록
-  const rows = vacs.filter(v => v.yearN === year && !YEAR_CATS.includes(v.kind));
+  //const rows = vacs.filter(v => v.yearN === year && !YEAR_CATS.includes(v.kind));
+  // 해당 연도의 전체 휴가 기록
+  const rows = vacs.filter(v => v.yearN === year);
   let total = 0;
   rows.forEach((v, i) => {
     const r = 2 + i;
@@ -660,6 +685,46 @@ function buildEtcSheet(wbx, vacs, year) {
 
   const widths = { 1: 6.7, 2: 10.8, 3: 6.7, 4: 10.4, 5: 22.3, 6: 10.8, 7: 10.8, 8: 7.7, 9: 26.8, 11: 12.1 };
   for (const c in widths) ws.getColumn(+c).width = widths[c];
+  return ws;
+}
+
+/* ===================== 휴가내역(총계) 시트 생성 ===================== */
+function buildSummarySheet(wbx, people, vacsN) {
+  const ws = wbx.addWorksheet('휴가내역');
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  setCell(ws, 1, 1, '기준일', { font: FONT_RED, fill: F.GRAY });
+  setCell(ws, 1, 2, xlDate(t), { font: FONT_RED, numFmt: NF_DATE });
+
+  const hdr = ['No.', '이름', '소속', '입사일', '근속년수', '발생연차 총계', '사용연차 총계', '잔여연차 총계'];
+  hdr.forEach((h, i) => setCell(ws, 2, i + 1, h, { font: FONT_B, fill: F.GRAY }));
+
+  let r = 3, tg = 0, tu = 0, tr2 = 0;
+  people.forEach((p, i) => {
+    const s = calcTotals(p, vacsN);
+    tg += s.granted; tu += s.used; tr2 += s.remain;
+    setCell(ws, r, 1, i + 1, {});
+    setCell(ws, r, 2, s.name, {});
+    setCell(ws, r, 3, s.dept, {});
+    setCell(ws, r, 4, s.hire ? xlDate(s.hire) : '-', { numFmt: NF_DATE });
+    setCell(ws, r, 5, s.yrs, { numFmt: NF_INT });
+    setCell(ws, r, 6, s.granted, { numFmt: NF_DEC });
+    setCell(ws, r, 7, s.used, { numFmt: NF_DEC });
+    setCell(ws, r, 8, s.remain, { fill: F.ORANGE, numFmt: NF_DEC }); // 잔여는 정산합계와 동일 → 주황 강조
+    r++;
+  });
+  // 합계 행
+  setCell(ws, r, 1, null, { fill: F.GRAY });
+  setCell(ws, r, 2, '합계', { font: FONT_B, fill: F.GRAY });
+  setCell(ws, r, 3, null, { fill: F.GRAY });
+  setCell(ws, r, 4, null, { fill: F.GRAY });
+  setCell(ws, r, 5, null, { fill: F.GRAY });
+  setCell(ws, r, 6, round2(tg), { font: FONT_B, fill: F.GRAY, numFmt: NF_DEC });
+  setCell(ws, r, 7, round2(tu), { font: FONT_B, fill: F.GRAY, numFmt: NF_DEC });
+  setCell(ws, r, 8, round2(tr2), { font: FONT_B, fill: F.GRAY, numFmt: NF_DEC });
+
+  [6, 12, 26, 11.1, 10, 14, 14, 14].forEach((w, i) => ws.getColumn(i + 1).width = w);
   return ws;
 }
 
@@ -786,14 +851,17 @@ setupDrop('dropVac', 'fileVac', 'fnameVac', wb => {
 });
 
 /* ----- 탭 ----- */
-document.getElementById('tabPeople').onclick = () => switchTab(true);
-document.getElementById('tabVac').onclick = () => switchTab(false);
-function switchTab(people) {
-  document.getElementById('tabPeople').classList.toggle('on', people);
-  document.getElementById('tabVac').classList.toggle('on', !people);
-  document.getElementById('panePeople').style.display = people ? '' : 'none';
-  document.getElementById('paneVac').style.display = people ? 'none' : '';
+const TABS = { people: ['tabPeople', 'panePeople'], vac: ['tabVac', 'paneVac'], sum: ['tabSum', 'paneSum'] };
+function switchTab(which) {
+  for (const k in TABS) {
+    document.getElementById(TABS[k][0]).classList.toggle('on', k === which);
+    document.getElementById(TABS[k][1]).style.display = k === which ? '' : 'none';
+  }
+  if (which === 'sum') renderSummary();
 }
+document.getElementById('tabPeople').onclick = () => switchTab('people');
+document.getElementById('tabVac').onclick = () => switchTab('vac');
+document.getElementById('tabSum').onclick = () => switchTab('sum');
 
 /* ----- 인원DB 편집 테이블 ----- */
 function mkInput(value, onchange, type) {
@@ -874,6 +942,59 @@ document.getElementById('addVac').onclick = () => {
   rows[rows.length - 1].querySelectorAll('input')[2].focus();
 };
 
+/* ----- 휴가내역 합계 (조회 전용) ----- */
+// 발생 = 누적연차 + 2018개정월차, 사용 = 누적사용 연차일수 + 사용월차, 잔여 = 발생-사용 (= 대장의 정산합계, 오늘 기준)
+function calcTotals(p, vacsN) {
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const o = calcPerson(p, vacsN, t.getFullYear(), t);
+  // vals: [0근속,1누적연차,2누적사용연차,3정산연차,4개정월차,5사용월차,6정산월차,7정산합계,...]
+  return {
+    name: o.name, dept: o.dept, hire: o.hire, yrs: o.vals[0],
+    granted: round2(o.vals[1] + o.vals[4]),
+    used: round2(o.vals[2] + o.vals[5]),
+    remain: round2(o.vals[7])
+  };
+}
+function renderSummary() {
+  if (!state.people || !state.vacs) return;
+  const q = document.getElementById('sumSearch').value.trim().toLowerCase();
+  const vacsN = state.vacs.map(normVac);
+  const thead = document.querySelector('#tblSum thead');
+  const tbody = document.querySelector('#tblSum tbody');
+  thead.innerHTML = '<tr><th style="width:40px">No</th><th>이름</th><th>소속</th><th>입사일</th><th>근속년수</th><th>발생연차 총계</th><th>사용연차 총계</th><th>잔여연차 총계</th></tr>';
+  tbody.innerHTML = '';
+  let shown = 0, tg = 0, tu = 0, tr2 = 0;
+  state.people.filter(p => p.name).forEach((p, i) => {
+    if (q && !p.name.toLowerCase().includes(q)) return;
+    shown++;
+    const s = calcTotals(p, vacsN);
+    tg += s.granted; tu += s.used; tr2 += s.remain;
+    const tr = document.createElement('tr');
+    const cells = [shown, s.name, s.dept, s.hire ? fmtDate(s.hire) : '-', s.yrs + '년', s.granted, s.used, s.remain];
+    cells.forEach((v, ci) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      if (typeof v === 'number' && v === 0 && ci >= 5) td.className = 'zero';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  // 합계 행
+  if (shown > 1) {
+    const tr = document.createElement('tr');
+    tr.className = 'total-row';
+    ['', '합계', '', '', '', round2(tg), round2(tu), round2(tr2)].forEach(v => {
+      const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  document.getElementById('sumCount').textContent =
+    (q ? shown + '명 표시 / 전체 ' + state.people.filter(p => p.name).length + '명' : '전체 ' + shown + '명')
+    + ' · 기준일 ' + fmtDate(new Date());
+}
+document.getElementById('sumSearch').addEventListener('input', renderSummary);
+
 /* ----- 수정한 DB 내려받기 ----- */
 document.getElementById('dlPeople').onclick = () => { if (state.people) downloadWb(makePeopleWb(state.people, false), '인원DB.xlsx'); };
 document.getElementById('dlVac').onclick = () => { if (state.vacs) downloadWb(makeVacWb(state.vacs, false), '휴가DB.xlsx'); };
@@ -890,6 +1011,7 @@ function refresh() {
 }
 function refreshDerived() {
   scheduleSave(); // 데이터 변경 시 자동 저장
+  if (document.getElementById('paneSum').style.display !== 'none') renderSummary(); // 합계 탭 열려있으면 갱신
   const summary = document.getElementById('summary');
   const warnbox = document.getElementById('warnbox');
   const chips = document.getElementById('yearChips');
@@ -952,7 +1074,7 @@ function updateGen() {
   msg.className = '';
   if (ready) {
     const ys = [...state.selected].sort((a, b) => b - a);
-    msg.textContent = ys.map(y => '휴가대장(' + y + ')').join(', ')
+    msg.textContent = '휴가내역(총계), ' + ys.map(y => '휴가대장(' + y + ')').join(', ')
       + (document.getElementById('withEtc').checked ? ' + 기타휴가 시트' : '') + ' 가 생성됩니다.';
   } else if (state.people && state.vacs) msg.textContent = '연도를 1개 이상 선택해 주세요.';
   else msg.textContent = '파일 2개를 올리고 연도를 선택하면 버튼이 활성화됩니다.';
@@ -1088,6 +1210,7 @@ document.getElementById('genBtn').onclick = async () => {
     const vacs = state.vacs.map(normVac);
     const withEtc = document.getElementById('withEtc').checked;
     const wbx = new ExcelJS.Workbook();
+    buildSummarySheet(wbx, people, vacs); // 휴가내역 총계 시트 (맨 앞)
     const years = [...state.selected].sort((a, b) => b - a);
     for (const y of years) {
       buildLedgerSheet(wbx, people, vacs, y);
@@ -1097,7 +1220,7 @@ document.getElementById('genBtn').onclick = async () => {
     const fname = '휴가대장_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '.xlsx';
     await downloadWb(wbx, fname);
     msg.className = 'ok';
-    msg.textContent = fname + ' 다운로드 완료 (' + (years.length * (withEtc ? 2 : 1)) + '개 시트)';
+    msg.textContent = fname + ' 다운로드 완료 (휴가내역 + ' + (years.length * (withEtc ? 2 : 1)) + '개 시트)';
   } catch (err) {
     msg.className = 'err';
     msg.textContent = '생성 실패: ' + err.message;
