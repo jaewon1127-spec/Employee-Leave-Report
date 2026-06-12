@@ -261,6 +261,7 @@
     <div id="paneVac" style="display:none">
       <div class="editor-tools">
         <input type="search" id="vacSearch" placeholder="성명 · 연도 · 휴가구분 검색">
+        <button class="btn-mini" id="dlVacFiltered">조회 결과 내려받기</button>
         <span class="count" id="vacCount"></span>
       </div>
       <div class="tbl-scroll">
@@ -998,6 +999,17 @@ document.getElementById('sumSearch').addEventListener('input', renderSummary);
 /* ----- 수정한 DB 내려받기 ----- */
 document.getElementById('dlPeople').onclick = () => { if (state.people) downloadWb(makePeopleWb(state.people, false), '인원DB.xlsx'); };
 document.getElementById('dlVac').onclick = () => { if (state.vacs) downloadWb(makeVacWb(state.vacs, false), '휴가DB.xlsx'); };
+/* ----- 휴가DB 탭 조회 결과 내려받기 (검색어 없으면 전체) ----- */
+document.getElementById('dlVacFiltered').onclick = () => {
+  if (!state.vacs || !state.vacs.length) { alert('내려받을 휴가 데이터가 없습니다.'); return; }
+  const q = document.getElementById('vacSearch').value.trim().toLowerCase();
+  const rows = q
+    ? state.vacs.filter(v => v.name.toLowerCase().includes(q) || v.year.includes(q) || v.kind.toLowerCase().includes(q))
+    : state.vacs;
+  if (!rows.length) { alert("'" + q + "' 검색 결과가 없습니다."); return; }
+  const fname = q ? '휴가DB_' + q + '.xlsx' : '휴가DB_전체.xlsx';
+  downloadWb(makeVacWb(rows, false), fname);
+};
 /* ----- 빈 양식 내려받기 ----- */
 document.getElementById('tplPeople').onclick = () =>
   downloadWb(makePeopleWb([{ name: '홍길동', status: '재직중', dept: '본사', hire: '2020-03-02', leave: '-' }], true), '인원DB_양식.xlsx');
