@@ -6,6 +6,11 @@
 <title>휴가대장 생성기</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/ko.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
 <style>
   :root {
     --ink: #1d2b24; --ink-soft: #5a6b62;
@@ -181,6 +186,63 @@
     font-size: 13px; font-family: inherit;
   }
 
+  /* ---- 퇴사자 정산 검색조건 (정리된 레이아웃) ---- */
+  .ret-toolbar {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 18px;
+    padding: 14px 16px; margin-bottom: 12px;
+    background: #fbfaf7; border: 1px solid var(--line); border-radius: 10px;
+  }
+  .ret-field { display: flex; flex-direction: column; gap: 5px; }
+  .ret-field > label { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+  .ret-field .row { display: flex; align-items: center; gap: 6px; }
+  .ret-field input, .ret-field select {
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; font-family: inherit; background: #fff;
+  }
+  .ret-field input[type=month] { width: 140px; }
+  .ret-field .sep { color: var(--ink-soft); }
+  .ret-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .ret-actions .count { font-size: 12.5px; color: var(--ink-soft); }
+
+  /* ---- 날짜 입력 공통 (폭 넉넉히 + 달력 아이콘 다듬기) ---- */
+  input[type=date], input[type=month] {
+    min-width: 150px; height: 36px; line-height: 1.2;
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; font-family: inherit; background: #fff; color: var(--ink);
+    appearance: none; -webkit-appearance: none;
+  }
+  input[type=date]:hover, input[type=month]:hover { border-color: var(--accent); }
+  input[type=date]:focus, input[type=month]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  /* 달력 아이콘(크롬/엣지)을 키우고 살짝 띄움 */
+  input[type=date]::-webkit-calendar-picker-indicator,
+  input[type=month]::-webkit-calendar-picker-indicator {
+    cursor: pointer; opacity: .55; padding: 2px; margin-left: 4px;
+    transition: opacity .12s;
+  }
+  input[type=date]:hover::-webkit-calendar-picker-indicator,
+  input[type=month]:hover::-webkit-calendar-picker-indicator { opacity: 1; }
+  /* 편집 테이블 안의 날짜 텍스트칸이 좁아 깨지지 않도록 최소폭 */
+  table.edit input { min-width: 84px; }
+
+  /* ---- flatpickr 날짜 입력칸 + 테마 ---- */
+  #sumBaseDate { min-width: 150px; }
+  #retFrom, #retTo { width: 120px; text-align: center; }
+  .flatpickr-day.selected, .flatpickr-day.selected:hover,
+  .flatpickr-day.startRange, .flatpickr-day.endRange {
+    background: var(--accent); border-color: var(--accent);
+  }
+  .flatpickr-day.today { border-color: var(--accent); }
+  .flatpickr-day:hover { background: var(--accent-soft); }
+  .flatpickr-monthSelect-month.selected { background: var(--accent); }
+  .flatpickr-monthSelect-month:hover { background: var(--accent-soft); }
+  
+  span.flatpickr-weekday { color: var(--accent); }
+
+  /* ---- 통화(원) 입력 셀 ---- */
+  .money-wrap { position: relative; display: flex; align-items: center; }
+  .money-wrap input { width: 100%; text-align: right; padding-right: 22px !important; }
+  .money-wrap .won { position: absolute; right: 8px; font-size: 12px; color: var(--ink-soft); pointer-events: none; }
+
   /* ---- 로딩 오버레이 ---- */
   #loadingOverlay {
     position: fixed; inset: 0; background: rgba(247,246,242,.78);
@@ -221,7 +283,7 @@
   <header>
     <div class="eyebrow">인사총무팀 · 휴가 관리</div>
     <h1>휴가대장 생성기</h1>
-    <p class="sub">인원DB와 휴가DB 파일을 올리고, 필요하면 화면에서 직접 수정한 뒤, 연도별 휴가대장·기타휴가 시트가 담긴 엑셀을 만듭니다.<br>
+    <p class="sub">인원DB와 휴가DB 파일을 올리고, 필요하면 화면에서 직접 수정한 뒤, 연도별 휴가대장·휴가리스트 시트가 담긴 엑셀을 만듭니다.<br>
     모든 처리는 이 브라우저 안에서만 이루어지며 파일이 외부로 전송되지 않습니다.</p>
   </header>
 
@@ -277,6 +339,7 @@
       <div class="tab on" id="tabPeople">인원DB</div>
       <div class="tab" id="tabVac">휴가DB</div>
       <div class="tab" id="tabSum">휴가내역 합계</div>
+      <div class="tab" id="tabRetire">퇴사자 정산</div>
     </div>
 
     <div id="panePeople">
@@ -287,13 +350,19 @@
         </table>
       </div>
       <button class="btn-sub add-row" id="addPeople">＋ 인원 추가</button>
+      <datalist id="statusList"><option value="재직중"></option><option value="퇴사"></option></datalist>
     </div>
 
     <div id="paneVac" style="display:none">
-      <div class="editor-tools">
-        <input type="search" id="vacSearch" placeholder="성명 · 연도 · 휴가구분 검색">
-        <button class="btn-mini" id="dlVacFiltered">조회 결과 내려받기</button>
-        <span class="count" id="vacCount"></span>
+      <div class="ret-toolbar">
+        <div class="ret-field">
+          <label for="vacSearch">검색</label>
+          <input type="search" id="vacSearch" placeholder="성명 · 연도 · 휴가구분">
+        </div>
+        <div class="ret-actions">
+          <button class="btn-mini" id="dlVacFiltered">조회 결과 내려받기</button>
+          <span class="count" id="vacCount"></span>
+        </div>
       </div>
       <div class="tbl-scroll">
         <table class="edit" id="tblVac">
@@ -306,19 +375,28 @@
     </div>
 
     <div id="paneSum" style="display:none">
-      <div class="editor-tools">
-        <input type="search" id="sumSearch" placeholder="이름 검색 (비우면 전체)">
-        <span class="sum-basedate">
-          <label for="sumMode">기준</label>
-          <select id="sumMode" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
+      <div class="ret-toolbar">
+        <div class="ret-field">
+          <label for="sumSearch">이름 검색</label>
+          <input type="search" id="sumSearch" placeholder="비우면 전체">
+        </div>
+        <div class="ret-field">
+          <label for="sumMode">계산 기준</label>
+          <select id="sumMode">
             <option value="hire">입사일 기준</option>
             <option value="fiscal">회계년도 기준</option>
           </select>
+        </div>
+        <div class="ret-field">
           <label for="sumBaseDate">기준일</label>
-          <input type="date" id="sumBaseDate">
-          <button class="btn-mini" id="sumBaseReset">오늘로</button>
-        </span>
-        <span class="count" id="sumCount"></span>
+          <div class="row">
+            <input type="text" id="sumBaseDate" placeholder="YYYY-MM-DD" autocomplete="off">
+            <button class="btn-mini" id="sumBaseReset">오늘로</button>
+          </div>
+        </div>
+        <div class="ret-actions">
+          <span class="count" id="sumCount"></span>
+        </div>
       </div>
       <div class="tbl-scroll">
         <table class="edit sum" id="tblSum">
@@ -327,6 +405,42 @@
         </table>
       </div>
       <div class="note">기준일 시점 · 전체 기간 누적 합계입니다. (기준일 비우면 오늘) <b>기준</b>을 <b>입사일</b> 또는 <b>회계년도</b>로 바꿔 볼 수 있어요. <b>발생</b> = 발생연차 + 입사 1년차 월차 · <b>사용</b> = 사용한 연차(연차+반차+여름휴가) + 월차 · <b>잔여</b> = 발생 − 사용. <b>행을 클릭하면 그 사람의 계산 과정</b>을 볼 수 있습니다. 조회 전용 — 수정은 인원DB/휴가DB 탭에서 해주세요.</div>
+    </div>
+
+    <div id="paneRetire" style="display:none">
+      <div class="ret-toolbar">
+        <div class="ret-field">
+          <label for="retSearch">이름 검색</label>
+          <input type="search" id="retSearch" placeholder="비우면 전체">
+        </div>
+        <div class="ret-field">
+          <label for="retMode">계산 기준</label>
+          <select id="retMode">
+            <option value="hire">입사일 기준</option>
+            <option value="fiscal">회계년도 기준</option>
+          </select>
+        </div>
+        <div class="ret-field">
+          <label>퇴사 기간</label>
+          <div class="row">
+            <input type="text" id="retFrom" title="시작 월" placeholder="YYYY-MM" autocomplete="off">
+            <span class="sep">~</span>
+            <input type="text" id="retTo" title="종료 월" placeholder="YYYY-MM" autocomplete="off">
+            <button class="btn-mini" id="retYearClear">해제</button>
+          </div>
+        </div>
+        <div class="ret-actions">
+          <button class="btn-mini" id="dlRetire">엑셀 내려받기</button>
+          <span class="count" id="retCount"></span>
+        </div>
+      </div>
+      <div class="tbl-scroll">
+        <table class="edit sum" id="tblRetire">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="note">퇴사일이 입력된 사람만 표시됩니다. 잔여연차는 <b>퇴사일 시점</b> 기준으로 계산됩니다(기준일 입력 불필요). <b>일단가</b>를 입력하면 <b>연차수당 = 잔여연차 × 일단가</b>가 자동 계산되며, 수당 칸을 직접 수정할 수도 있습니다. 입력값은 이 브라우저에 자동 저장됩니다.</div>
     </div>
     <div class="note">수정 내용은 이 화면에만 유지됩니다. 다음에 이어서 쓰려면 <b>수정한 인원DB/휴가DB 내려받기</b>로 저장한 파일을 다음번에 다시 올려 주세요.</div>
   </section>
@@ -940,17 +1054,19 @@ setupDrop('dropVac', 'fileVac', 'fnameVac', wb => {
 });
 
 /* ----- 탭 ----- */
-const TABS = { people: ['tabPeople', 'panePeople'], vac: ['tabVac', 'paneVac'], sum: ['tabSum', 'paneSum'] };
+const TABS = { people: ['tabPeople', 'panePeople'], vac: ['tabVac', 'paneVac'], sum: ['tabSum', 'paneSum'], retire: ['tabRetire', 'paneRetire'] };
 function switchTab(which) {
   for (const k in TABS) {
     document.getElementById(TABS[k][0]).classList.toggle('on', k === which);
     document.getElementById(TABS[k][1]).style.display = k === which ? '' : 'none';
   }
   if (which === 'sum') renderSummary();
+  if (which === 'retire') renderRetire();
 }
 document.getElementById('tabPeople').onclick = () => switchTab('people');
 document.getElementById('tabVac').onclick = () => switchTab('vac');
 document.getElementById('tabSum').onclick = () => switchTab('sum');
+document.getElementById('tabRetire').onclick = () => switchTab('retire');
 
 /* ----- 인원DB 편집 테이블 ----- */
 function mkInput(value, onchange, type) {
@@ -958,6 +1074,69 @@ function mkInput(value, onchange, type) {
   inp.type = type || 'text';
   inp.value = value;
   inp.addEventListener('change', () => { onchange(inp.value.trim()); refreshDerived(); });
+  return inp;
+}
+
+/* ===================== 입력 공통 헬퍼 ===================== */
+// 날짜 텍스트 자동 하이픈 + 자리수 제한 (YYYY-MM-DD = 8자리, YYYY-MM = 6자리)
+function formatDateTyping(raw, withDay) {
+  const d = String(raw).replace(/\D/g, '').slice(0, withDay ? 8 : 6);
+  let out = d.slice(0, 4);
+  if (d.length > 4) out += '-' + d.slice(4, 6);
+  if (withDay && d.length > 6) out += '-' + d.slice(6, 8);
+  return out;
+}
+// 날짜 입력칸: 글자 입력 차단(숫자·하이픈만), 자동 하이픈, flatpickr 달력 연결
+// kind: 'date'(일) | 'month'(월)
+function attachDateInput(inp, kind, onCommit) {
+  const isMonth = kind === 'month';
+  inp.setAttribute('inputmode', 'numeric');
+  inp.placeholder = isMonth ? 'YYYY-MM' : 'YYYY-MM-DD';
+  inp.autocomplete = 'off';
+  // 타이핑 중 숫자만 → 자동 하이픈 + 자리수 제한
+  inp.addEventListener('input', () => {
+    const caretEnd = inp.selectionStart === inp.value.length;
+    inp.value = formatDateTyping(inp.value, !isMonth);
+    if (caretEnd) try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) {}
+  });
+  // flatpickr 달력 — 칸을 처음 클릭(focus)할 때만 생성 (행이 많아도 가볍게)
+  if (typeof flatpickr !== 'undefined') {
+    let fpReady = false;
+    const initFp = () => {
+      if (fpReady) return;            // 이미 만들었으면 재생성 안 함
+      fpReady = true;
+      try {
+        const opt = { allowInput: true, disableMobile: true,
+          onChange: () => { if (onCommit) onCommit(inp.value.trim()); } };
+        if (isMonth && typeof monthSelectPlugin !== 'undefined') {
+          opt.plugins = [new monthSelectPlugin({ shorthand: false, dateFormat: 'Y-m', altFormat: 'Y년 m월' })];
+        } else {
+          opt.dateFormat = isMonth ? 'Y-m' : 'Y-m-d';
+        }
+        const fp = flatpickr(inp, opt);
+        fp.open();                    // 첫 클릭이면 바로 달력 펼치기
+      } catch (e) {}
+    };
+    // 클릭/포커스 시 1회 생성. (생성 전까지는 자동 하이픈 텍스트 입력만 동작)
+    inp.addEventListener('focus', initFp);
+    inp.addEventListener('click', initFp);
+  }
+  return inp;
+}
+// 숫자만 입력 (정수 또는 소수). decimals: 허용 소수 자릿수(없으면 정수만)
+function attachNumberInput(inp, decimals) {
+  inp.setAttribute('inputmode', 'decimal');
+  inp.addEventListener('input', () => {
+    let s = inp.value.replace(/[^\d.]/g, '');
+    const parts = s.split('.');
+    if (parts.length > 2) s = parts[0] + '.' + parts.slice(1).join('');
+    if (decimals != null && parts[1] != null) {
+      s = parts[0] + '.' + parts[1].slice(0, decimals);
+    } else if (!decimals && s.includes('.')) {
+      s = s.split('.')[0]; // 정수만
+    }
+    inp.value = s;
+  });
   return inp;
 }
 function renderPeople() {
@@ -968,7 +1147,19 @@ function renderPeople() {
     const tdNo = document.createElement('td'); tdNo.style.textAlign = 'center'; tdNo.textContent = i + 1; tr.appendChild(tdNo);
     [['name'], ['status'], ['dept'], ['hire'], ['leave']].forEach(([key]) => {
       const td = document.createElement('td');
-      td.appendChild(mkInput(p[key], v => p[key] = v));
+      if (key === 'status') {
+        // 재직여부: 콤보(재직중/퇴사). 직접 입력도 가능하도록 datalist 사용.
+        const inp = mkInput(p[key], v => p[key] = v);
+        inp.setAttribute('list', 'statusList');
+        td.appendChild(inp);
+      } else if (key === 'hire' || key === 'leave') {
+        // 입사일/퇴사일: 글자 차단 + 자동 하이픈 + 달력
+        const inp = mkInput(p[key], v => p[key] = v);
+        attachDateInput(inp, 'date', val => { p[key] = val; refreshDerived(); });
+        td.appendChild(inp);
+      } else {
+        td.appendChild(mkInput(p[key], v => p[key] = v));
+      }
       tr.appendChild(td);
     });
     const tdDel = document.createElement('td');
@@ -1003,6 +1194,11 @@ function renderVacs() {
       const inp = mkInput(v[key], val => v[key] = val);
       if (key === 'days' || key === 'year') td.className = 'num';
       if (key === 'kind') inp.setAttribute('list', 'kindList');
+      if (key === 'year') attachNumberInput(inp);            // 정수만
+      if (key === 'days') attachNumberInput(inp, 2);         // 소수 2자리까지
+      if (key === 'apply' || key === 'start' || key === 'end') {
+        attachDateInput(inp, 'date', val => { v[key] = val; refreshDerived(); }); // 글자차단+달력
+      }
       td.appendChild(inp);
       tr.appendChild(td);
     });
@@ -1096,7 +1292,9 @@ function calcTotals(p, vacsN) {
 
   let grantedAnnual, fiscalRows = null;
   if (mode === 'fiscal') {
-    const f = fiscalGrant(o.hire, t);
+    // 퇴사자는 퇴사일까지만 계산 (입사일 기준과 동일하게 맞춤)
+    const fiscalEnd = o.leave ? new Date(Math.min(o.leave, t)) : t;
+    const f = fiscalGrant(o.hire, fiscalEnd);
     grantedAnnual = f.annual;
     fiscalRows = f.rows;
     var monthlyForGrant = f.monthly;
@@ -1169,9 +1367,214 @@ document.getElementById('sumSearch').addEventListener('input', renderSummary);
 document.getElementById('sumBaseDate').addEventListener('change', renderSummary);
 document.getElementById('sumMode').addEventListener('change', renderSummary);
 document.getElementById('sumBaseReset').onclick = () => {
-  document.getElementById('sumBaseDate').value = '';
+  const el = document.getElementById('sumBaseDate');
+  if (el._flatpickr) el._flatpickr.clear(); else el.value = '';
   renderSummary();
 };
+
+/* ===================== 퇴사자 정산 ===================== */
+// 단가/수당 입력값 저장소 (이름 기준). { '홍길동': {rate: 100000, pay: null(자동)|숫자(수동)} }
+let retirePay = {};
+function retMode() { const el = document.getElementById('retMode'); return el ? el.value : 'hire'; }
+// 퇴사 월 필터: 퇴사일 → 'YYYY-MM' 문자열. retFrom/retTo는 month input이라 'YYYY-MM' 형식.
+function retMonthKey(d) {
+  if (!d) return '';
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1);
+}
+// 천단위 콤마 (숫자만 추출 후 포맷). 빈값이면 '' 반환.
+function commaNum(v) {
+  if (v === '' || v == null) return '';
+  const n = String(v).replace(/[^\d.]/g, '');
+  if (n === '') return '';
+  const num = Number(n);
+  return isNaN(num) ? '' : num.toLocaleString('ko-KR');
+}
+// 콤마 제거 → 숫자(문자열). 빈값이면 ''.
+function uncomma(v) { const s = String(v).replace(/,/g, '').trim(); return s; }
+
+// 퇴사자 1명의 발생/사용/잔여 (퇴사일 시점 기준)
+function calcRetiree(p, vacsN) {
+  const leave = parseDate(p.leave);
+  if (!leave) return null;
+  const mode = retMode();
+  const o = calcPerson(p, vacsN, leave.getFullYear(), leave); // 퇴사일을 기준일로
+  let grantedAnnual, monthlyForGrant;
+  if (mode === 'fiscal') {
+    const f = fiscalGrant(o.hire, leave);
+    grantedAnnual = f.annual; monthlyForGrant = f.monthly;
+  } else {
+    grantedAnnual = o.vals[1]; monthlyForGrant = o.vals[4];
+  }
+  const granted = round2(grantedAnnual + monthlyForGrant);
+  const used = round2(o.vals[2] + o.vals[5]);
+  const remain = round2(granted - used);
+  return { name: o.name, dept: o.dept, hire: o.hire, leave, granted, used, remain };
+}
+
+function renderRetire() {
+  if (!state.people || !state.vacs) {
+    document.querySelector('#tblRetire thead').innerHTML = '';
+    document.querySelector('#tblRetire tbody').innerHTML = '';
+    document.getElementById('retCount').textContent = '파일을 먼저 올려 주세요.';
+    return;
+  }
+  const q = document.getElementById('retSearch').value.trim().toLowerCase();
+  const mFrom = document.getElementById('retFrom').value; // 'YYYY-MM' 또는 ''
+  const mTo = document.getElementById('retTo').value;
+  const vacsN = state.vacs.map(normVac);
+  const thead = document.querySelector('#tblRetire thead');
+  const tbody = document.querySelector('#tblRetire tbody');
+  thead.innerHTML = '<tr><th style="width:40px">No</th><th>이름</th><th>소속</th><th>입사일</th><th>퇴사일</th>'
+    + '<th>발생연차</th><th>사용연차</th><th>잔여연차</th><th style="width:130px">일단가(원)</th><th style="width:150px">연차수당(원)</th></tr>';
+  tbody.innerHTML = '';
+
+  // 퇴사자 = 퇴사일 입력된 사람
+  let list = state.people.filter(p => p.name && parseDate(p.leave));
+  // 퇴사 기간 From~To 필터 (월 단위)
+  list = list.filter(p => {
+    const mk = retMonthKey(parseDate(p.leave));
+    if (mFrom && mk < mFrom) return false;
+    if (mTo && mk > mTo) return false;
+    return true;
+  });
+  // 이름 검색
+  const shownList = list.filter(p => !q || p.name.toLowerCase().includes(q));
+
+  let totRemain = 0, totPay = 0;
+  shownList.forEach((p, i) => {
+    const r = calcRetiree(p, vacsN);
+    if (!r) return;
+    const saved = retirePay[r.name] || {};
+    const rate = saved.rate != null ? saved.rate : '';
+    // 수당: 잔여 × 일단가 자동계산 (수정 불가)
+    const pay = (rate !== '' && !isNaN(rate)) ? round2(r.remain * rate) : '';
+    totRemain += r.remain;
+    if (pay !== '' && !isNaN(pay)) totPay += Number(pay);
+
+    const tr = document.createElement('tr');
+    const tds = [i + 1, r.name, r.dept, r.hire ? fmtDate(r.hire) : '-', fmtDate(r.leave),
+      r.granted, r.used, r.remain];
+    tds.forEach((v, ci) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    // 일단가 입력 (천단위 콤마 표시)
+    const tdRate = document.createElement('td'); tdRate.className = 'num';
+    const wrapRate = document.createElement('div'); wrapRate.className = 'money-wrap';
+    const inpRate = document.createElement('input');
+    inpRate.type = 'text'; inpRate.inputMode = 'numeric';
+    inpRate.value = commaNum(rate); inpRate.placeholder = '0';
+    // 입력 중에는 실시간 콤마, 저장/재렌더는 blur(포커스 아웃) 때만 (커서 튐 방지)
+    inpRate.addEventListener('input', () => {
+      const caretEnd = inpRate.selectionStart === inpRate.value.length;
+      inpRate.value = commaNum(inpRate.value);
+      if (caretEnd) inpRate.setSelectionRange(inpRate.value.length, inpRate.value.length);
+    });
+    inpRate.addEventListener('change', () => {
+      const v = uncomma(inpRate.value);
+      retirePay[r.name] = retirePay[r.name] || {};
+      retirePay[r.name].rate = v === '' ? null : Number(v);
+      retirePay[r.name].pay = null; // 단가 바꾸면 수당은 자동으로 되돌림
+      scheduleSave();
+      renderRetire();
+    });
+    const wonR = document.createElement('span'); wonR.className = 'won'; wonR.textContent = '원';
+    wrapRate.appendChild(inpRate); wrapRate.appendChild(wonR);
+    tdRate.appendChild(wrapRate); tr.appendChild(tdRate);
+    // 연차수당 — 자동계산 표시 전용 (수정 불가): 잔여 × 일단가
+    const tdPay = document.createElement('td'); tdPay.className = 'num';
+    const autoPay = (rate !== '' && !isNaN(rate)) ? round2(r.remain * rate) : '';
+    tdPay.textContent = autoPay === '' ? '-' : commaNum(autoPay) + ' 원';
+    tdPay.style.fontWeight = '600';
+    tr.appendChild(tdPay);
+    tbody.appendChild(tr);
+  });
+
+  // 합계 행
+  if (shownList.length) {
+    const tr = document.createElement('tr');
+    tr.className = 'total-row';
+    const cells = ['', '합계', '', '', '', '', '', round2(totRemain), '', Math.round(totPay).toLocaleString()];
+    cells.forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+    tbody.appendChild(tr);
+  }
+
+  const totalRetirees = list.length;
+  document.getElementById('retCount').textContent =
+    (q ? shownList.length + '명 표시 / 퇴사자 ' + totalRetirees + '명' : '퇴사자 ' + totalRetirees + '명')
+    + ' · ' + (retMode() === 'fiscal' ? '회계년도 기준' : '입사일 기준');
+}
+document.getElementById('retSearch').addEventListener('input', renderRetire);
+document.getElementById('retMode').addEventListener('change', renderRetire);
+document.getElementById('retFrom').addEventListener('input', renderRetire);
+document.getElementById('retTo').addEventListener('input', renderRetire);
+document.getElementById('retYearClear').onclick = () => {
+  ['retFrom', 'retTo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el._flatpickr) el._flatpickr.clear(); else el.value = '';
+  });
+  renderRetire();
+};
+
+// 퇴사자 정산 엑셀 내려받기
+document.getElementById('dlRetire').onclick = async () => {
+  if (!state.people || !state.vacs) { alert('파일을 먼저 올려 주세요.'); return; }
+  const q = document.getElementById('retSearch').value.trim().toLowerCase();
+  const mFrom = document.getElementById('retFrom').value;
+  const mTo = document.getElementById('retTo').value;
+  const vacsN = state.vacs.map(normVac);
+  let list = state.people.filter(p => p.name && parseDate(p.leave));
+  list = list.filter(p => {
+    const mk = retMonthKey(parseDate(p.leave));
+    if (mFrom && mk < mFrom) return false;
+    if (mTo && mk > mTo) return false;
+    return true;
+  }).filter(p => !q || p.name.toLowerCase().includes(q));
+  if (!list.length) { alert('조회된 퇴사자가 없습니다.'); return; }
+
+  showLoading('퇴사자 정산 시트 생성 중...');
+  await nextFrame();
+  try {
+    const wbx = new ExcelJS.Workbook();
+    const ws = wbx.addWorksheet('퇴사자정산');
+    setCell(ws, 1, 1, '계산방식', { font: FONT_B, fill: F.GRAY });
+    setCell(ws, 1, 2, retMode() === 'fiscal' ? '회계년도 기준' : '입사일 기준', { font: FONT_B });
+    const hdr = ['No.', '이름', '소속', '입사일', '퇴사일', '발생연차', '사용연차', '잔여연차', '일단가(원)', '연차수당(원)'];
+    hdr.forEach((h, i) => setCell(ws, 2, i + 1, h, { font: FONT_B, fill: F.GRAY }));
+    let r = 3, totRemain = 0, totPay = 0;
+    list.forEach((p, i) => {
+      const o = calcRetiree(p, vacsN);
+      const saved = retirePay[o.name] || {};
+      const rate = saved.rate != null ? saved.rate : '';
+      const pay = (rate !== '' && !isNaN(rate)) ? round2(o.remain * rate) : '';
+      setCell(ws, r, 1, i + 1, {});
+      setCell(ws, r, 2, o.name, {});
+      setCell(ws, r, 3, o.dept, {});
+      setCell(ws, r, 4, o.hire ? xlDate(o.hire) : '-', { numFmt: NF_DATE });
+      setCell(ws, r, 5, xlDate(o.leave), { numFmt: NF_DATE });
+      setCell(ws, r, 6, o.granted, { numFmt: NF_DEC });
+      setCell(ws, r, 7, o.used, { numFmt: NF_DEC });
+      setCell(ws, r, 8, o.remain, { fill: F.ORANGE, numFmt: NF_DEC });
+      setCell(ws, r, 9, rate === '' ? '' : Number(rate), { numFmt: NF_INT });
+      setCell(ws, r, 10, pay === '' ? '' : Number(pay), { fill: F.ORANGE, numFmt: NF_INT });
+      totRemain += o.remain; if (pay !== '' && !isNaN(pay)) totPay += Number(pay);
+      r++;
+    });
+    setCell(ws, r, 2, '합계', { font: FONT_B, fill: F.GRAY });
+    for (let c = 3; c <= 7; c++) setCell(ws, r, c, null, { fill: F.GRAY });
+    setCell(ws, r, 1, null, { fill: F.GRAY });
+    setCell(ws, r, 8, round2(totRemain), { font: FONT_B, fill: F.GRAY, numFmt: NF_DEC });
+    setCell(ws, r, 9, null, { fill: F.GRAY });
+    setCell(ws, r, 10, Math.round(totPay), { font: FONT_B, fill: F.GRAY, numFmt: NF_INT });
+    [6, 12, 22, 11.1, 11.1, 10, 10, 10, 14, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
+    const t = new Date(); const p = n => String(n).padStart(2, '0');
+    await downloadWb(wbx, '퇴사자정산_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '.xlsx');
+    hideLoading();
+  } catch (err) { hideLoading(); alert('생성 실패: ' + err.message); }
+};
+
 
 // 합계 행 클릭 시 계산 상세 모달
 function showCalcDetail(s) {
@@ -1231,6 +1634,7 @@ function refresh() {
 function refreshDerived() {
   scheduleSave(); // 데이터 변경 시 자동 저장
   if (document.getElementById('paneSum').style.display !== 'none') renderSummary(); // 합계 탭 열려있으면 갱신
+  if (document.getElementById('paneRetire').style.display !== 'none') renderRetire(); // 퇴사자 탭 갱신
   const summary = document.getElementById('summary');
   const warnbox = document.getElementById('warnbox');
   const chips = document.getElementById('yearChips');
@@ -1321,7 +1725,7 @@ function saveLocal() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       v: 1, savedAt: new Date().toISOString(),
       people: state.people, vacs: state.vacs,
-      selected: [...state.selected]
+      selected: [...state.selected], retirePay
     }));
     setStorageMsg(true, '자동 저장됨 · ' + new Date().toLocaleTimeString('ko-KR'));
   } catch (e) {
@@ -1339,6 +1743,7 @@ function applyData(data, sourceLabel) {
   state.vacs = Array.isArray(data.vacs) ? data.vacs : null;
   state.years = []; state.selected = new Set();
   if (Array.isArray(data.selected)) state.pendingSelected = data.selected;
+  retirePay = (data.retirePay && typeof data.retirePay === 'object') ? data.retirePay : {};
   if (state.people) {
     renderPeople();
     document.getElementById('dropPeople').classList.add('done');
@@ -1395,7 +1800,7 @@ document.getElementById('backupBtn').onclick = async () => {
   if (!state.people && !state.vacs) { alert('백업할 데이터가 없습니다. 먼저 파일을 올려 주세요.'); return; }
   const payload = JSON.stringify({
     v: 1, savedAt: new Date().toISOString(),
-    people: state.people, vacs: state.vacs, selected: [...state.selected]
+    people: state.people, vacs: state.vacs, selected: [...state.selected], retirePay
   });
   const pw = prompt('백업 파일을 보호할 비밀번호를 입력하세요.\n(비우고 확인하면 암호화 없이 저장됩니다)\n\n※ 비밀번호를 잊으면 복구할 수 없습니다.');
   if (pw === null) return;
@@ -1418,7 +1823,6 @@ document.getElementById('backupBtn').onclick = async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
 /* ----- 백업 복원 ----- */
-document.getElementById('restoreBtn').onclick = () => document.getElementById('restoreFile').click();
 document.getElementById('restoreFile').addEventListener('change', function () {
   if (!this.files.length) return;
   const file = this.files[0];
@@ -1461,6 +1865,17 @@ document.getElementById('manualBtn').onclick = () => setDrawer(true);
 document.getElementById('drawerClose').onclick = () => setDrawer(false);
 overlay.onclick = () => setDrawer(false);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
+
+/* ===================== 날짜 선택기 (flatpickr) ===================== */
+// 한국어 로케일 (flatpickr 있을 때만)
+(function setupLocale() {
+  if (typeof flatpickr === 'undefined') return;
+  try { if (flatpickr.l10ns && flatpickr.l10ns.ko) flatpickr.localize(flatpickr.l10ns.ko); } catch (e) {}
+})();
+// 검색조건 날짜 — 공통 헬퍼로 글자차단+자동하이픈+달력 연결
+attachDateInput(document.getElementById('sumBaseDate'), 'date', () => renderSummary());
+attachDateInput(document.getElementById('retFrom'), 'month', () => renderRetire());
+attachDateInput(document.getElementById('retTo'), 'month', () => renderRetire());
 
 /* ===================== 시작 시 저장 데이터 복원 ===================== */
 loadLocal();
