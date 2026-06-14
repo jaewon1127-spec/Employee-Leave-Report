@@ -7,10 +7,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/plugins/monthSelect/style.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/ko.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/plugins/monthSelect/index.min.js"></script>
 <style>
   :root {
     --ink: #1d2b24; --ink-soft: #5a6b62;
@@ -76,6 +76,17 @@
   }
   .editor-tools .count { font-size: 12.5px; color: var(--ink-soft); margin-left: auto; }
   .tbl-scroll { max-height: 430px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+
+  /* ---- 페이지네이션 ---- */
+  .pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
+  .pager button {
+    min-width: 34px; height: 32px; padding: 0 10px; border: 1px solid var(--line);
+    background: #fff; border-radius: 8px; font-size: 13px; cursor: pointer; color: var(--ink);
+  }
+  .pager button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .pager button.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+  .pager .pinfo { font-size: 12.5px; color: var(--ink-soft); margin: 0 8px; }
   table.edit { border-collapse: collapse; width: 100%; font-size: 13px; }
   table.edit th {
     position: sticky; top: 0; background: #efede6; font-weight: 700; padding: 9px 8px;
@@ -235,7 +246,6 @@
   .flatpickr-day:hover { background: var(--accent-soft); }
   .flatpickr-monthSelect-month.selected { background: var(--accent); }
   .flatpickr-monthSelect-month:hover { background: var(--accent-soft); }
-  
   span.flatpickr-weekday { color: var(--accent); }
 
   /* ---- 통화(원) 입력 셀 ---- */
@@ -283,7 +293,7 @@
   <header>
     <div class="eyebrow">인사총무팀 · 휴가 관리</div>
     <h1>휴가대장 생성기</h1>
-    <p class="sub">인원DB와 휴가DB 파일을 올리고, 필요하면 화면에서 직접 수정한 뒤, 연도별 휴가대장·휴가리스트 시트가 담긴 엑셀을 만듭니다.<br>
+    <p class="sub">인원DB와 휴가DB 파일을 올리고, 필요하면 화면에서 직접 수정한 뒤, 연도별 휴가대장·기타휴가 시트가 담긴 엑셀을 만듭니다.<br>
     모든 처리는 이 브라우저 안에서만 이루어지며 파일이 외부로 전송되지 않습니다.</p>
   </header>
 
@@ -335,11 +345,20 @@
         <button class="btn-sub" id="dlVac">수정한 휴가DB 내려받기</button>
       </span>
     </div>
-    <div class="tabs">
+    <div class="tabs" style="display:flex; align-items:center;">
       <div class="tab on" id="tabPeople">인원DB</div>
       <div class="tab" id="tabVac">휴가DB</div>
       <div class="tab" id="tabSum">휴가내역 합계</div>
       <div class="tab" id="tabRetire">퇴사자 정산</div>
+      <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft);">
+        페이지당
+        <select id="pageSizeSel" style="padding:5px 8px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; background:#fff;">
+          <option value="50">50건</option>
+          <option value="100" selected>100건</option>
+          <option value="500">500건</option>
+          <option value="1000">1000건</option>
+        </select>
+      </span>
     </div>
 
     <div id="panePeople">
@@ -349,6 +368,7 @@
           <tbody></tbody>
         </table>
       </div>
+      <div class="pager" id="pagerPeople"></div>
       <button class="btn-sub add-row" id="addPeople">＋ 인원 추가</button>
       <datalist id="statusList"><option value="재직중"></option><option value="퇴사"></option></datalist>
     </div>
@@ -370,6 +390,7 @@
           <tbody></tbody>
         </table>
       </div>
+      <div class="pager" id="pagerVac"></div>
       <button class="btn-sub add-row" id="addVac">＋ 휴가기록 추가</button>
       <datalist id="kindList"></datalist>
     </div>
@@ -404,6 +425,7 @@
           <tbody></tbody>
         </table>
       </div>
+      <div class="pager" id="pagerSum"></div>
       <div class="note">기준일 시점 · 전체 기간 누적 합계입니다. (기준일 비우면 오늘) <b>기준</b>을 <b>입사일</b> 또는 <b>회계년도</b>로 바꿔 볼 수 있어요. <b>발생</b> = 발생연차 + 입사 1년차 월차 · <b>사용</b> = 사용한 연차(연차+반차+여름휴가) + 월차 · <b>잔여</b> = 발생 − 사용. <b>행을 클릭하면 그 사람의 계산 과정</b>을 볼 수 있습니다. 조회 전용 — 수정은 인원DB/휴가DB 탭에서 해주세요.</div>
     </div>
 
@@ -440,7 +462,8 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="note">퇴사일이 입력된 사람만 표시됩니다. 잔여연차는 <b>퇴사일 시점</b> 기준으로 계산됩니다(기준일 입력 불필요). <b>일단가</b>를 입력하면 <b>연차수당 = 잔여연차 × 일단가</b>가 자동 계산되며, 수당 칸을 직접 수정할 수도 있습니다. 입력값은 이 브라우저에 자동 저장됩니다.</div>
+      <div class="pager" id="pagerRetire"></div>
+      <div class="note">퇴사일이 입력된 사람만 표시됩니다. 잔여연차는 <b>퇴사일 시점</b> 기준으로 계산됩니다(기준일 입력 불필요). <b>일단가</b>를 입력하면 <b>연차수당 = 잔여연차 × 일단가</b>가 자동 계산됩니다(수정 불가). 입력값은 이 브라우저에 자동 저장됩니다.</div>
     </div>
     <div class="note">수정 내용은 이 화면에만 유지됩니다. 다음에 이어서 쓰려면 <b>수정한 인원DB/휴가DB 내려받기</b>로 저장한 파일을 다음번에 다시 올려 주세요.</div>
   </section>
@@ -1055,18 +1078,90 @@ setupDrop('dropVac', 'fileVac', 'fnameVac', wb => {
 
 /* ----- 탭 ----- */
 const TABS = { people: ['tabPeople', 'panePeople'], vac: ['tabVac', 'paneVac'], sum: ['tabSum', 'paneSum'], retire: ['tabRetire', 'paneRetire'] };
-function switchTab(which) {
+async function switchTab(which) {
   for (const k in TABS) {
     document.getElementById(TABS[k][0]).classList.toggle('on', k === which);
     document.getElementById(TABS[k][1]).style.display = k === which ? '' : 'none';
   }
-  if (which === 'sum') renderSummary();
-  if (which === 'retire') renderRetire();
+  const rerender = () => {
+    if (which === 'people') renderPeople();
+    else if (which === 'vac') renderVacs();
+    else if (which === 'sum') renderSummary();
+    else if (which === 'retire') renderRetire();
+  };
+  // 데이터가 많으면 로딩바를 잠깐 띄우고 다음 프레임에 렌더 (멈춘 듯 보이는 것 방지)
+  const heavy = (state.people && state.people.length > 200) || (state.vacs && state.vacs.length > 200);
+  if (heavy) {
+    showLoading('불러오는 중...');
+    await nextFrame();
+    rerender();
+    hideLoading();
+  } else {
+    rerender();
+  }
 }
 document.getElementById('tabPeople').onclick = () => switchTab('people');
 document.getElementById('tabVac').onclick = () => switchTab('vac');
 document.getElementById('tabSum').onclick = () => switchTab('sum');
 document.getElementById('tabRetire').onclick = () => switchTab('retire');
+
+/* ===================== 페이지네이션 ===================== */
+let PAGE_SIZE = 100;
+// 페이지당 표시 건수 변경
+document.getElementById('pageSizeSel').addEventListener('change', e => {
+  PAGE_SIZE = parseInt(e.target.value, 10) || 100;
+  // 모든 탭 1페이지로 리셋
+  pageState.people = 1; pageState.vac = 1; pageState.sum = 1; pageState.retire = 1;
+  // 현재 열려 있는 탭만 다시 그리기
+  if (document.getElementById('panePeople').style.display !== 'none') renderPeople();
+  else if (document.getElementById('paneVac').style.display !== 'none') renderVacs();
+  else if (document.getElementById('paneSum').style.display !== 'none') renderSummary();
+  else if (document.getElementById('paneRetire').style.display !== 'none') renderRetire();
+});
+// 탭별 현재 페이지 (1부터)
+const pageState = { people: 1, vac: 1, sum: 1, retire: 1 };
+
+// 페이지 바 그리기. total=전체 항목 수, pagerId=바 DOM id, key=pageState 키, onGo=페이지 변경 시 재렌더 콜백
+function renderPager(pagerId, key, total, onGo) {
+  const el = document.getElementById(pagerId);
+  if (!el) return;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (pageState[key] > pages) pageState[key] = pages;
+  const cur = pageState[key];
+  el.innerHTML = '';
+  if (total <= PAGE_SIZE) return; // 한 페이지면 바 숨김
+
+  const mk = (label, page, opts = {}) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (opts.active) b.className = 'active';
+    if (opts.disabled) b.disabled = true;
+    if (!opts.disabled && !opts.active) b.onclick = () => { pageState[key] = page; onGo(); };
+    return b;
+  };
+  el.appendChild(mk('‹', cur - 1, { disabled: cur === 1 }));
+  // 페이지 번호 (현재 기준 앞뒤 2개씩 + 처음/끝)
+  const nums = new Set([1, pages, cur, cur - 1, cur - 2, cur + 1, cur + 2].filter(n => n >= 1 && n <= pages));
+  const sorted = [...nums].sort((a, b) => a - b);
+  let prev = 0;
+  sorted.forEach(n => {
+    if (n - prev > 1) { const s = document.createElement('span'); s.className = 'pinfo'; s.textContent = '…'; el.appendChild(s); }
+    el.appendChild(mk(String(n), n, { active: n === cur }));
+    prev = n;
+  });
+  el.appendChild(mk('›', cur + 1, { disabled: cur === pages }));
+  const info = document.createElement('span'); info.className = 'pinfo';
+  const from = (cur - 1) * PAGE_SIZE + 1, to = Math.min(cur * PAGE_SIZE, total);
+  info.textContent = from + '–' + to + ' / ' + total;
+  el.appendChild(info);
+}
+// 현재 페이지에 해당하는 슬라이스 범위 [start, end)
+function pageSlice(key, total) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (pageState[key] > pages) pageState[key] = pages;
+  const start = (pageState[key] - 1) * PAGE_SIZE;
+  return [start, Math.min(start + PAGE_SIZE, total)];
+}
 
 /* ----- 인원DB 편집 테이블 ----- */
 function mkInput(value, onchange, type) {
@@ -1142,18 +1237,19 @@ function attachNumberInput(inp, decimals) {
 function renderPeople() {
   const tbody = document.querySelector('#tblPeople tbody');
   tbody.innerHTML = '';
-  (state.people || []).forEach((p, i) => {
+  const all = state.people || [];
+  const [start, end] = pageSlice('people', all.length);
+  all.slice(start, end).forEach((p, idx) => {
+    const i = start + idx; // 원본 인덱스 (삭제 정확성)
     const tr = document.createElement('tr');
     const tdNo = document.createElement('td'); tdNo.style.textAlign = 'center'; tdNo.textContent = i + 1; tr.appendChild(tdNo);
     [['name'], ['status'], ['dept'], ['hire'], ['leave']].forEach(([key]) => {
       const td = document.createElement('td');
       if (key === 'status') {
-        // 재직여부: 콤보(재직중/퇴사). 직접 입력도 가능하도록 datalist 사용.
         const inp = mkInput(p[key], v => p[key] = v);
         inp.setAttribute('list', 'statusList');
         td.appendChild(inp);
       } else if (key === 'hire' || key === 'leave') {
-        // 입사일/퇴사일: 글자 차단 + 자동 하이픈 + 달력
         const inp = mkInput(p[key], v => p[key] = v);
         attachDateInput(inp, 'date', val => { p[key] = val; refreshDerived(); });
         td.appendChild(inp);
@@ -1169,13 +1265,15 @@ function renderPeople() {
     tdDel.appendChild(del); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
+  renderPager('pagerPeople', 'people', all.length, renderPeople);
 }
 document.getElementById('addPeople').onclick = () => {
   if (!state.people) state.people = [];
   state.people.push({ name: '', status: '재직중', dept: '', hire: '', leave: '' });
+  pageState.people = Math.ceil(state.people.length / PAGE_SIZE); // 마지막 페이지로
   renderPeople(); refreshDerived();
   const rows = document.querySelectorAll('#tblPeople tbody tr');
-  rows[rows.length - 1].querySelector('input').focus();
+  if (rows.length) rows[rows.length - 1].querySelector('input').focus();
 };
 
 /* ----- 휴가DB 편집 테이블 ----- */
@@ -1184,20 +1282,24 @@ function renderVacs() {
   const tbody = document.querySelector('#tblVac tbody');
   const q = document.getElementById('vacSearch').value.trim().toLowerCase();
   tbody.innerHTML = '';
-  let shown = 0;
+  // 검색 필터 (원본 인덱스 보존)
+  const filtered = [];
   (state.vacs || []).forEach((v, i) => {
     if (q && !(v.name.toLowerCase().includes(q) || v.year.includes(q) || v.kind.toLowerCase().includes(q))) return;
-    shown++;
+    filtered.push({ v, i });
+  });
+  const [start, end] = pageSlice('vac', filtered.length);
+  filtered.slice(start, end).forEach(({ v, i }) => {
     const tr = document.createElement('tr');
     VAC_KEYS.forEach(key => {
       const td = document.createElement('td');
       const inp = mkInput(v[key], val => v[key] = val);
       if (key === 'days' || key === 'year') td.className = 'num';
       if (key === 'kind') inp.setAttribute('list', 'kindList');
-      if (key === 'year') attachNumberInput(inp);            // 정수만
-      if (key === 'days') attachNumberInput(inp, 2);         // 소수 2자리까지
+      if (key === 'year') attachNumberInput(inp);
+      if (key === 'days') attachNumberInput(inp, 2);
       if (key === 'apply' || key === 'start' || key === 'end') {
-        attachDateInput(inp, 'date', val => { v[key] = val; refreshDerived(); }); // 글자차단+달력
+        attachDateInput(inp, 'date', val => { v[key] = val; refreshDerived(); });
       }
       td.appendChild(inp);
       tr.appendChild(td);
@@ -1209,22 +1311,25 @@ function renderVacs() {
     tdDel.appendChild(del); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
+  const total = state.vacs ? state.vacs.length : 0;
   document.getElementById('vacCount').textContent =
-    q ? shown + '건 표시 / 전체 ' + state.vacs.length + '건' : '전체 ' + (state.vacs ? state.vacs.length : 0) + '건';
+    q ? filtered.length + '건 표시 / 전체 ' + total + '건' : '전체 ' + total + '건';
+  renderPager('pagerVac', 'vac', filtered.length, renderVacs);
   // 휴가구분 자동완성 목록
   const dl = document.getElementById('kindList');
   dl.innerHTML = '';
   [...KNOWN_KINDS].forEach(k => { const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
 }
-document.getElementById('vacSearch').addEventListener('input', renderVacs);
+document.getElementById('vacSearch').addEventListener('input', () => { pageState.vac = 1; renderVacs(); });
 document.getElementById('addVac').onclick = () => {
   if (!state.vacs) state.vacs = [];
   const today = fmtDate(new Date());
   state.vacs.push({ year: String(new Date().getFullYear()), apply: today, name: '', dept: '', kind: '연차', start: today, end: today, days: '1', note: '' });
   document.getElementById('vacSearch').value = '';
+  pageState.vac = Math.ceil(state.vacs.length / PAGE_SIZE);
   renderVacs(); refreshDerived();
   const rows = document.querySelectorAll('#tblVac tbody tr');
-  rows[rows.length - 1].querySelectorAll('input')[2].focus();
+  if (rows.length) rows[rows.length - 1].querySelectorAll('input')[2].focus();
 };
 
 /* ----- 휴가내역 합계 (조회 전용) ----- */
@@ -1331,17 +1436,19 @@ function renderSummary() {
   const tbody = document.querySelector('#tblSum tbody');
   thead.innerHTML = '<tr><th style="width:40px">No</th><th>이름</th><th>소속</th><th>입사일</th><th>근속년수</th><th>발생연차 총계</th><th>사용연차 총계</th><th>잔여연차 총계</th></tr>';
   tbody.innerHTML = '';
-  let shown = 0, tg = 0, tu = 0, tr2 = 0;
-  state.people.filter(p => p.name).forEach((p, i) => {
-    if (q && !p.name.toLowerCase().includes(q)) return;
-    shown++;
-    const s = calcTotals(p, vacsN);
+  // 이름 필터
+  const filtered = state.people.filter(p => p.name && (!q || p.name.toLowerCase().includes(q)));
+  const [start, end] = pageSlice('sum', filtered.length);
+  let tg = 0, tu = 0, tr2 = 0;
+  filtered.slice(start, end).forEach((p, idx) => {
+    const no = start + idx + 1;
+    const s = calcTotals(p, vacsN); // 현재 페이지 100명만 계산 → 가벼움
     tg += s.granted; tu += s.used; tr2 += s.remain;
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
     tr.title = '클릭하면 계산 상세를 봅니다';
     tr.onclick = () => showCalcDetail(s);
-    const cells = [shown, s.name, s.dept, s.hire ? fmtDate(s.hire) : '-', s.yrs + '년', s.granted, s.used, s.remain];
+    const cells = [no, s.name, s.dept, s.hire ? fmtDate(s.hire) : '-', s.yrs + '년', s.granted, s.used, s.remain];
     cells.forEach((v, ci) => {
       const td = document.createElement('td');
       td.textContent = v;
@@ -1350,20 +1457,21 @@ function renderSummary() {
     });
     tbody.appendChild(tr);
   });
-  // 합계 행
-  if (shown > 1) {
+  // 합계 행 (현재 페이지 합)
+  if (end - start > 1) {
     const tr = document.createElement('tr');
     tr.className = 'total-row';
-    ['', '합계', '', '', '', round2(tg), round2(tu), round2(tr2)].forEach(v => {
+    ['', '이 페이지 합계', '', '', '', round2(tg), round2(tu), round2(tr2)].forEach(v => {
       const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
     });
     tbody.appendChild(tr);
   }
+  renderPager('pagerSum', 'sum', filtered.length, renderSummary);
   document.getElementById('sumCount').textContent =
-    (q ? shown + '명 표시 / 전체 ' + state.people.filter(p => p.name).length + '명' : '전체 ' + shown + '명')
+    (q ? filtered.length + '명 표시 / 전체 ' + state.people.filter(p => p.name).length + '명' : '전체 ' + filtered.length + '명')
     + ' · 기준일 ' + fmtDate(sumBaseDate());
 }
-document.getElementById('sumSearch').addEventListener('input', renderSummary);
+document.getElementById('sumSearch').addEventListener('input', () => { pageState.sum = 1; renderSummary(); });
 document.getElementById('sumBaseDate').addEventListener('change', renderSummary);
 document.getElementById('sumMode').addEventListener('change', renderSummary);
 document.getElementById('sumBaseReset').onclick = () => {
@@ -1441,13 +1549,14 @@ function renderRetire() {
   // 이름 검색
   const shownList = list.filter(p => !q || p.name.toLowerCase().includes(q));
 
+  const [pStart, pEnd] = pageSlice('retire', shownList.length);
   let totRemain = 0, totPay = 0;
-  shownList.forEach((p, i) => {
+  shownList.slice(pStart, pEnd).forEach((p, idx) => {
+    const i = pStart + idx;
     const r = calcRetiree(p, vacsN);
     if (!r) return;
     const saved = retirePay[r.name] || {};
     const rate = saved.rate != null ? saved.rate : '';
-    // 수당: 잔여 × 일단가 자동계산 (수정 불가)
     const pay = (rate !== '' && !isNaN(rate)) ? round2(r.remain * rate) : '';
     totRemain += r.remain;
     if (pay !== '' && !isNaN(pay)) totPay += Number(pay);
@@ -1492,24 +1601,25 @@ function renderRetire() {
     tbody.appendChild(tr);
   });
 
-  // 합계 행
-  if (shownList.length) {
+  // 합계 행 (현재 페이지 합)
+  if (pEnd - pStart > 0) {
     const tr = document.createElement('tr');
     tr.className = 'total-row';
-    const cells = ['', '합계', '', '', '', '', '', round2(totRemain), '', Math.round(totPay).toLocaleString()];
+    const cells = ['', '이 페이지 합계', '', '', '', '', '', round2(totRemain), '', Math.round(totPay).toLocaleString() + ' 원'];
     cells.forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
     tbody.appendChild(tr);
   }
+  renderPager('pagerRetire', 'retire', shownList.length, renderRetire);
 
   const totalRetirees = list.length;
   document.getElementById('retCount').textContent =
     (q ? shownList.length + '명 표시 / 퇴사자 ' + totalRetirees + '명' : '퇴사자 ' + totalRetirees + '명')
     + ' · ' + (retMode() === 'fiscal' ? '회계년도 기준' : '입사일 기준');
 }
-document.getElementById('retSearch').addEventListener('input', renderRetire);
+document.getElementById('retSearch').addEventListener('input', () => { pageState.retire = 1; renderRetire(); });
 document.getElementById('retMode').addEventListener('change', renderRetire);
-document.getElementById('retFrom').addEventListener('input', renderRetire);
-document.getElementById('retTo').addEventListener('input', renderRetire);
+document.getElementById('retFrom').addEventListener('input', () => { pageState.retire = 1; renderRetire(); });
+document.getElementById('retTo').addEventListener('input', () => { pageState.retire = 1; renderRetire(); });
 document.getElementById('retYearClear').onclick = () => {
   ['retFrom', 'retTo'].forEach(id => {
     const el = document.getElementById(id);
