@@ -173,6 +173,37 @@
   .tip { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
   .caution { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
 
+  /* ---- 합계 탭 기준일 입력 ---- */
+  .sum-basedate { display: flex; align-items: center; gap: 8px; }
+  .sum-basedate label { font-weight: 700; }
+  .sum-basedate input[type=date] {
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; font-family: inherit;
+  }
+
+  /* ---- 로딩 오버레이 ---- */
+  #loadingOverlay {
+    position: fixed; inset: 0; background: rgba(247,246,242,.78);
+    display: none; align-items: center; justify-content: center; z-index: 80;
+    backdrop-filter: blur(2px);
+  }
+  #loadingOverlay.show { display: flex; }
+  .loading-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 28px 34px; min-width: 280px; max-width: 90vw; text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,.12);
+  }
+  .spinner {
+    width: 38px; height: 38px; margin: 0 auto 16px;
+    border: 4px solid var(--accent-soft); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadingText { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .progress-track { height: 8px; background: var(--accent-soft); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 99px; transition: width .2s ease; }
+  #loadingPct { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
+
   .gen-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   #genBtn {
     background: var(--accent); color: #fff; border: none; border-radius: 10px;
@@ -277,6 +308,16 @@
     <div id="paneSum" style="display:none">
       <div class="editor-tools">
         <input type="search" id="sumSearch" placeholder="이름 검색 (비우면 전체)">
+        <span class="sum-basedate">
+          <label for="sumMode">기준</label>
+          <select id="sumMode" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;">
+            <option value="hire">입사일 기준</option>
+            <option value="fiscal">회계년도 기준</option>
+          </select>
+          <label for="sumBaseDate">기준일</label>
+          <input type="date" id="sumBaseDate">
+          <button class="btn-mini" id="sumBaseReset">오늘로</button>
+        </span>
         <span class="count" id="sumCount"></span>
       </div>
       <div class="tbl-scroll">
@@ -285,7 +326,7 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="note">오늘 기준 · 전체 기간 합계입니다. <b>발생</b> = 누적연차 + 2018개정월차 · <b>사용</b> = 누적사용 연차일수(연차+반차+여름휴가) + 사용월차 · <b>잔여</b> = 발생 − 사용 (휴가대장의 정산합계와 동일). 조회 전용 — 수정은 인원DB/휴가DB 탭에서 해주세요.</div>
+      <div class="note">기준일 시점 · 전체 기간 누적 합계입니다. (기준일 비우면 오늘) <b>기준</b>을 <b>입사일</b> 또는 <b>회계년도</b>로 바꿔 볼 수 있어요. <b>발생</b> = 발생연차 + 입사 1년차 월차 · <b>사용</b> = 사용한 연차(연차+반차+여름휴가) + 월차 · <b>잔여</b> = 발생 − 사용. <b>행을 클릭하면 그 사람의 계산 과정</b>을 볼 수 있습니다. 조회 전용 — 수정은 인원DB/휴가DB 탭에서 해주세요.</div>
     </div>
     <div class="note">수정 내용은 이 화면에만 유지됩니다. 다음에 이어서 쓰려면 <b>수정한 인원DB/휴가DB 내려받기</b>로 저장한 파일을 다음번에 다시 올려 주세요.</div>
   </section>
@@ -350,7 +391,7 @@
       <li>셀을 클릭해 바로 수정합니다. 수정 즉시 자동 저장됩니다.</li>
       <li><b>＋ 추가</b> 버튼으로 인원/휴가기록을 추가, 행 끝 <b>✕</b>로 삭제합니다.</li>
       <li>휴가DB 탭의 검색창에서 성명·연도·휴가구분으로 찾을 수 있습니다.</li>
-      <li><b>휴가내역 합계</b> 탭 — 사람별 발생연차·사용연차·잔여연차 총계를 오늘 기준으로 보여줍니다. 이름으로 검색할 수 있고, 엑셀 생성 시 '휴가내역' 시트로도 함께 들어갑니다.</li>
+      <li><b>휴가내역 합계</b> 탭 — 사람별 발생연차·사용연차·잔여연차 총계를 보여줍니다. <b>기준</b>(입사일/회계년도)과 <b>기준일</b>을 바꿔 계산할 수 있고, 이름으로 검색할 수 있습니다. <b>행을 클릭하면 그 사람의 계산 과정</b>이 표로 펼쳐집니다. 엑셀 생성 시 '휴가내역' 시트로도 같은 기준·기준일로 함께 들어갑니다.</li>
       <li><b>수정한 인원DB/휴가DB 내려받기</b>로 엑셀 파일로도 보관할 수 있습니다.</li>
     </ul>
 
@@ -374,6 +415,17 @@
     <p>연차 발생: 근속 1년당 15일, 2년마다 1일 가산, 최대 25일.<br>
     정산기준일: 지난 연도는 그해 12월 31일, 올해는 오늘.</p>
 
+    <h3>발생연차 기준 — 입사일 vs 회계년도</h3>
+    <p>휴가내역 합계 탭에서 두 가지 방식으로 발생연차를 볼 수 있습니다. 사용·잔여의 집계 범위(전체 누적)는 같고, <b>발생연차 계산만</b> 달라집니다.</p>
+    <table>
+      <tr><th>방식</th><th>발생연차 계산</th></tr>
+      <tr><td>입사일 기준</td><td>입사일부터 기준일까지 만 1년마다 발생한 연차의 누적</td></tr>
+      <tr><td>회계년도 기준</td><td>입사 첫해는 다음 해 1/1에 <b>비례연차</b>(입사일~12/31 일수 ÷ 365 × 15일, 0.5일 단위 올림) 지급, 이후 매년 1/1 발생. 여기에 <b>입사 1년차 월차(최대 11일)</b>를 더함</td></tr>
+    </table>
+    <p>두 방식 모두 발생연차에 입사 1년차 월차를 포함합니다. 회계년도 기준은 근로기준법 행정해석을 따른 것으로, 입사 첫해 비례분 때문에 신입은 더 많게, 장기근속자는 입사일 기준과 비슷하거나 적게 나올 수 있습니다.</p>
+    <div class="caution"><b>퇴직 정산 주의</b> — 법상 퇴직 시점에는 입사일 기준으로 재계산하여 더 유리한 쪽으로 정산해야 합니다. 이 도구의 회계년도 값은 평상시 관리용 참고치이며, 퇴직 정산은 입사일 기준 값과 함께 확인하세요.</div>
+    <p>합계 탭에서 <b>행을 클릭</b>하면 그 사람의 발생·사용·잔여가 어떤 항목으로 계산됐는지 한 줄씩 펼쳐 보여줍니다.</p>
+
     <h3>노란 경고 상자의 의미</h3>
     <ul>
       <li><b>기타휴가로 집계되는 휴가구분</b> — 표준 구분명과 다르게 입력된 항목입니다. 의도한 것이면 그대로 두고, 아니면(예: <code>경조사</code> → <code>경조휴가</code>) 2단계에서 수정하세요.</li>
@@ -389,6 +441,16 @@
     생성 파일은 계산 결과가 고정된 값입니다. 데이터 수정 후 다시 생성해 주세요.</p>
   </div>
 </aside>
+
+<!-- 로딩 오버레이 -->
+<div id="loadingOverlay">
+  <div class="loading-card">
+    <div class="spinner"></div>
+    <div id="loadingText">처리 중...</div>
+    <div class="progress-track"><div class="progress-fill" id="loadingFill"></div></div>
+    <div id="loadingPct"></div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -657,9 +719,9 @@ function buildLedgerSheet(wbx, people, vacs, year) {
   return ws;
 }
 
-/* ===================== 기타휴가(YYYY) 시트 생성 ===================== */
+/* ===================== 휴가리스트(YYYY) 시트 생성 ===================== */
 function buildEtcSheet(wbx, vacs, year) {
-  const ws = wbx.addWorksheet('기타휴가(' + year + ')');
+  const ws = wbx.addWorksheet('휴가리스트(' + year + ')');
   const hdr = ['YEAR', '신청일', '성명', '근무지', '휴가구분', '시작일', '마지막일', '사용일', '비고'];
   hdr.forEach((h, i) => setCell(ws, 1, i + 1, h, { font: FONT_B, fill: F.GRAY }));
   setCell(ws, 1, 11, '사용일 합계', { font: FONT_B, fill: F.GRAY });
@@ -692,11 +754,12 @@ function buildEtcSheet(wbx, vacs, year) {
 /* ===================== 휴가내역(총계) 시트 생성 ===================== */
 function buildSummarySheet(wbx, people, vacsN) {
   const ws = wbx.addWorksheet('휴가내역');
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const t = sumBaseDate();
 
   setCell(ws, 1, 1, '기준일', { font: FONT_RED, fill: F.GRAY });
   setCell(ws, 1, 2, xlDate(t), { font: FONT_RED, numFmt: NF_DATE });
+  setCell(ws, 1, 3, '계산방식', { font: FONT_B, fill: F.GRAY });
+  setCell(ws, 1, 4, sumMode() === 'fiscal' ? '회계년도 기준' : '입사일 기준', { font: FONT_B });
 
   const hdr = ['No.', '이름', '소속', '입사일', '근속년수', '발생연차 총계', '사용연차 총계', '잔여연차 총계'];
   hdr.forEach((h, i) => setCell(ws, 2, i + 1, h, { font: FONT_B, fill: F.GRAY }));
@@ -808,6 +871,24 @@ function makeVacWb(rows, withGuide) {
   return wbx;
 }
 
+/* ===================== 로딩 오버레이 ===================== */
+const loadEl = document.getElementById('loadingOverlay');
+const loadText = document.getElementById('loadingText');
+const loadFill = document.getElementById('loadingFill');
+const loadPct = document.getElementById('loadingPct');
+function showLoading(text) {
+  loadText.textContent = text || '처리 중...';
+  setProgress(0, '');
+  loadEl.classList.add('show');
+}
+function setProgress(pct, label) {
+  loadFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  loadPct.textContent = label != null ? label : (pct ? Math.round(pct) + '%' : '');
+}
+function hideLoading() { loadEl.classList.remove('show'); }
+// 긴 작업 중 화면을 다시 그릴 틈을 주는 헬퍼
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+
 /* ===================== 상태 & 편집 화면 ===================== */
 const state = { people: null, vacs: null, years: [], selected: new Set() };
 
@@ -823,16 +904,22 @@ function setupDrop(dropId, inputId, fnameId, onFile) {
   });
   input.addEventListener('change', () => { if (input.files.length) handle(input.files[0]); });
   function handle(file) {
+    showLoading('파일 읽는 중...');
     const reader = new FileReader();
     reader.onload = ev => {
-      try {
-        // cellDates를 끄고 일련번호로 받아 SSF로 파싱 → 시간대 영향 없음
-        const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
-        if (onFile(wb)) { drop.classList.add('done'); fname.textContent = '✓ ' + file.name; }
-        else { drop.classList.remove('done'); fname.textContent = ''; }
-      } catch (err) { alert('파일을 읽지 못했습니다: ' + err.message); }
-      refresh();
+      // 로딩바를 먼저 그린 뒤 파싱 (대용량 파일 대비)
+      requestAnimationFrame(() => { setTimeout(() => {
+        try {
+          // cellDates를 끄고 일련번호로 받아 SSF로 파싱 → 시간대 영향 없음
+          const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
+          if (onFile(wb)) { drop.classList.add('done'); fname.textContent = '✓ ' + file.name; }
+          else { drop.classList.remove('done'); fname.textContent = ''; }
+        } catch (err) { alert('파일을 읽지 못했습니다: ' + err.message); }
+        refresh();
+        hideLoading();
+      }, 0); });
     };
+    reader.onerror = () => { hideLoading(); alert('파일 읽기에 실패했습니다.'); };
     reader.readAsArrayBuffer(file);
   }
 }
@@ -944,18 +1031,98 @@ document.getElementById('addVac').onclick = () => {
 };
 
 /* ----- 휴가내역 합계 (조회 전용) ----- */
-// 발생 = 누적연차 + 2018개정월차, 사용 = 누적사용 연차일수 + 사용월차, 잔여 = 발생-사용 (= 대장의 정산합계, 오늘 기준)
+// 합계 탭 기준일 (입력 없으면 오늘). 휴가대장(calcDateFor)에는 영향 없음.
+function sumBaseDate() {
+  const el = document.getElementById('sumBaseDate');
+  const d = el && el.value ? parseDate(el.value) : null;
+  if (d) return d;
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+// 합계 탭 계산 방식: 'hire'(입사일) | 'fiscal'(회계년도)
+function sumMode() {
+  const el = document.getElementById('sumMode');
+  return el ? el.value : 'hire';
+}
+// 0.5 단위 올림
+function ceilHalf(n) { return Math.ceil(n * 2) / 2; }
+// 회계연도 기준 누적 발생연차 (근로기준법/행정해석)
+//  - 입사 첫해: 다음해 1/1에 (입사일~그해 12/31 재직일수 ÷ 365 × 15) 비례연차, 0.5단위 올림
+//  - 입사 1년차 월차(최대 11): 별도 가산 (옵션 1번 포함)
+//  - 입사 다다음해(법상 1년차)부터 매년 1/1 정규연차
+// 반환: { annual(정규+비례), monthly(1년차월차), rows:[설명] }
+function fiscalGrant(hire, calcDate) {
+  if (!hire) return { annual: 0, monthly: 0, rows: [] };
+  const baseYear = calcDate.getFullYear();
+  const rows = [];
+  let annual = 0;
+
+  // (1) 입사 첫해 비례연차 → 입사 다음해 1/1 지급 (그 해가 기준연도 이하일 때만 발생)
+  if (hire.getFullYear() + 1 <= baseYear) {
+    const endHireYear = new Date(hire.getFullYear(), 11, 31);
+    const propDays = Math.round((endHireYear - hire) / 86400000) + 1; // 재직일수(당일포함)
+    const propRaw = 15 * propDays / 365;
+    const prop = ceilHalf(propRaw);
+    annual += prop;
+    rows.push((hire.getFullYear() + 1) + '.1.1 비례연차: 15 × ' + propDays + '일 ÷ 365 = ' + propRaw.toFixed(2) + ' → 0.5단위 올림 ' + prop);
+  }
+
+  // (2) 입사 다다음해(법상 1년차)부터 매년 1/1 정규연차
+  for (let y = hire.getFullYear() + 2; y <= baseYear; y++) {
+    const k = y - hire.getFullYear() - 1; // 회계 근속차수 1,2,3...
+    const v = Math.min(25, 15 + Math.floor((k - 1) / 2));
+    annual += v;
+    rows.push(y + '.1.1 (' + k + '년차): ' + v);
+  }
+
+  // (3) 입사 1년차 월차 (옵션1: 포함) — 입사일 기준과 동일 로직
+  let monthly = 0;
+  if (!(hire > calcDate) && !(hire < LAW_DATE)) {
+    const cap = new Date(Math.min(calcDate, addMonths(hire, 12)));
+    monthly = Math.min(11, datedifM(hire, cap));
+  }
+  return { annual: round2(annual), monthly, rows };
+}
+
+// 발생 = 누적연차 + 2018개정월차, 사용 = 누적사용 연차일수 + 사용월차, 잔여 = 발생-사용 (= 대장의 정산합계, 기준일 시점)
 function calcTotals(p, vacsN) {
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const t = sumBaseDate();
   const o = calcPerson(p, vacsN, t.getFullYear(), t);
   // vals: [0근속,1누적연차,2누적사용연차,3정산연차,4개정월차,5사용월차,6정산월차,7정산합계,...]
-  return {
-    name: o.name, dept: o.dept, hire: o.hire, yrs: o.vals[0],
-    granted: round2(o.vals[1] + o.vals[4]),
-    used: round2(o.vals[2] + o.vals[5]),
-    remain: round2(o.vals[7])
-  };
+  const mode = sumMode();
+  // detail: 행 클릭 시 보여줄 계산 분해
+  const detail = { mode, base: fmtDate(t), hire: o.hire ? fmtDate(o.hire) : '-', name: o.name, lines: [] };
+
+  let grantedAnnual, fiscalRows = null;
+  if (mode === 'fiscal') {
+    const f = fiscalGrant(o.hire, t);
+    grantedAnnual = f.annual;
+    fiscalRows = f.rows;
+    var monthlyForGrant = f.monthly;
+  } else {
+    grantedAnnual = o.vals[1];      // 입사일 기준 누적연차
+    monthlyForGrant = o.vals[4];    // 2018개정월차
+  }
+  const granted = round2(grantedAnnual + monthlyForGrant);
+  const used = round2(o.vals[2] + o.vals[5]);
+  const remain = round2(granted - used);
+
+  // 상세 라인 구성
+  if (mode === 'fiscal') {
+    detail.lines.push(['발생 — 회계연도 누적연차', grantedAnnual]);
+    fiscalRows.forEach(r => detail.lines.push(['   · ' + r, '']));
+    detail.lines.push(['발생 — 입사 1년차 월차(최대11)', monthlyForGrant]);
+  } else {
+    detail.lines.push(['발생 — 입사일 누적연차 (만 ' + o.vals[0] + '년)', grantedAnnual]);
+    detail.lines.push(['발생 — 2018개정월차(최대11)', monthlyForGrant]);
+  }
+  detail.lines.push(['발생연차 총계', granted, 'strong']);
+  detail.lines.push(['사용 — 연차+반차+여름휴가', o.vals[2]]);
+  detail.lines.push(['사용 — 월차', o.vals[5]]);
+  detail.lines.push(['사용연차 총계', used, 'strong']);
+  detail.lines.push(['잔여연차 총계 (발생 − 사용)', remain, 'strong']);
+
+  return { name: o.name, dept: o.dept, hire: o.hire, yrs: o.vals[0], granted, used, remain, detail };
 }
 function renderSummary() {
   if (!state.people || !state.vacs) return;
@@ -972,6 +1139,9 @@ function renderSummary() {
     const s = calcTotals(p, vacsN);
     tg += s.granted; tu += s.used; tr2 += s.remain;
     const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.title = '클릭하면 계산 상세를 봅니다';
+    tr.onclick = () => showCalcDetail(s);
     const cells = [shown, s.name, s.dept, s.hire ? fmtDate(s.hire) : '-', s.yrs + '년', s.granted, s.used, s.remain];
     cells.forEach((v, ci) => {
       const td = document.createElement('td');
@@ -992,9 +1162,45 @@ function renderSummary() {
   }
   document.getElementById('sumCount').textContent =
     (q ? shown + '명 표시 / 전체 ' + state.people.filter(p => p.name).length + '명' : '전체 ' + shown + '명')
-    + ' · 기준일 ' + fmtDate(new Date());
+    + ' · 기준일 ' + fmtDate(sumBaseDate());
 }
 document.getElementById('sumSearch').addEventListener('input', renderSummary);
+document.getElementById('sumBaseDate').addEventListener('change', renderSummary);
+document.getElementById('sumMode').addEventListener('change', renderSummary);
+document.getElementById('sumBaseReset').onclick = () => {
+  document.getElementById('sumBaseDate').value = '';
+  renderSummary();
+};
+
+// 합계 행 클릭 시 계산 상세 모달
+function showCalcDetail(s) {
+  const modeLabel = s.detail.mode === 'fiscal' ? '회계년도 기준' : '입사일 기준';
+  let rows = '';
+  s.detail.lines.forEach(([label, val, strong]) => {
+    const v = (val === '' ? '' : val);
+    rows += '<tr' + (strong ? ' style="font-weight:700;background:var(--accent-soft)"' : '') + '>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid var(--line)">' + label + '</td>'
+      + '<td style="padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">' + v + '</td></tr>';
+  });
+  const html =
+    '<div style="position:fixed;inset:0;background:rgba(20,30,25,.4);z-index:90;display:flex;align-items:center;justify-content:center" id="calcModalBg">'
+    + '<div style="background:var(--card);border-radius:14px;max-width:520px;width:92vw;max-height:85vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)">'
+    + '<b style="font-size:15px">' + s.name + ' — 계산 상세</b>'
+    + '<button id="calcModalClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--ink-soft)">✕</button></div>'
+    + '<div style="padding:14px 20px">'
+    + '<div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px">방식: <b>' + modeLabel + '</b> · 입사일 ' + s.detail.hire + ' · 기준일 ' + s.detail.base + '</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px">' + rows + '</table>'
+    + '</div></div></div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap.firstChild);
+  const bg = document.getElementById('calcModalBg');
+  const close = () => bg.remove();
+  document.getElementById('calcModalClose').onclick = close;
+  bg.onclick = e => { if (e.target === bg) close(); };
+  document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
+}
 
 /* ----- 수정한 DB 내려받기 ----- */
 document.getElementById('dlPeople').onclick = () => { if (state.people) downloadWb(makePeopleWb(state.people, false), '인원DB.xlsx'); };
@@ -1221,19 +1427,34 @@ document.getElementById('genBtn').onclick = async () => {
     const people = state.people.filter(p => p.name);
     const vacs = state.vacs.map(normVac);
     const withEtc = document.getElementById('withEtc').checked;
+    const years = [...state.selected].sort((a, b) => b - a);
+
+    // 진행 단계: 휴가내역(1) + 연도별 시트 + 저장(1)
+    const totalSteps = 1 + years.length * (withEtc ? 2 : 1) + 1;
+    let step = 0;
+    const tick = async (label) => { step++; setProgress(step / totalSteps * 100, label); await nextFrame(); };
+
+    showLoading('엑셀 파일 생성 중...');
+    await nextFrame();
+
     const wbx = new ExcelJS.Workbook();
     buildSummarySheet(wbx, people, vacs); // 휴가내역 총계 시트 (맨 앞)
-    const years = [...state.selected].sort((a, b) => b - a);
+    await tick('휴가내역 시트');
     for (const y of years) {
       buildLedgerSheet(wbx, people, vacs, y);
-      if (withEtc) buildEtcSheet(wbx, vacs, y);
+      await tick('휴가대장(' + y + ')');
+      if (withEtc) { buildEtcSheet(wbx, vacs, y); await tick('기타휴가(' + y + ')'); }
     }
+    loadText.textContent = '파일로 저장 중...';
     const t = new Date(); const p = n => String(n).padStart(2, '0');
     const fname = '휴가대장_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '.xlsx';
     await downloadWb(wbx, fname);
+    await tick('완료');
+    hideLoading();
     msg.className = 'ok';
     msg.textContent = fname + ' 다운로드 완료 (휴가내역 + ' + (years.length * (withEtc ? 2 : 1)) + '개 시트)';
   } catch (err) {
+    hideLoading();
     msg.className = 'err';
     msg.textContent = '생성 실패: ' + err.message;
     console.error(err);
