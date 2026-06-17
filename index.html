@@ -345,20 +345,11 @@
         <button class="btn-sub" id="dlVac">수정한 휴가DB 내려받기</button>
       </span>
     </div>
-    <div class="tabs" style="display:flex; align-items:center;">
+    <div class="tabs">
       <div class="tab on" id="tabPeople">인원DB</div>
       <div class="tab" id="tabVac">휴가DB</div>
       <div class="tab" id="tabSum">휴가내역 합계</div>
       <div class="tab" id="tabRetire">퇴사자 정산</div>
-      <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-soft);">
-        페이지당
-        <select id="pageSizeSel" style="padding:5px 8px; border:1px solid var(--line); border-radius:8px; font-size:13px; font-family:inherit; background:#fff;">
-          <option value="50">50건</option>
-          <option value="100" selected>100건</option>
-          <option value="500">500건</option>
-          <option value="1000">1000건</option>
-        </select>
-      </span>
     </div>
 
     <div id="panePeople">
@@ -376,8 +367,18 @@
     <div id="paneVac" style="display:none">
       <div class="ret-toolbar">
         <div class="ret-field">
-          <label for="vacSearch">검색</label>
-          <input type="search" id="vacSearch" placeholder="성명 · 연도 · 휴가구분">
+          <label for="vacSearchCol">검색 항목</label>
+          <select id="vacSearchCol" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+            <option value="name">성명</option>
+            <option value="year">YEAR</option>
+            <option value="dept">근무지</option>
+            <option value="kind">휴가구분</option>
+            <option value="note">비고</option>
+          </select>
+        </div>
+        <div class="ret-field">
+          <label for="vacSearch">검색어</label>
+          <input type="search" id="vacSearch" placeholder="비우면 전체">
         </div>
         <div class="ret-actions">
           <button class="btn-mini" id="dlVacFiltered">조회 결과 내려받기</button>
@@ -986,6 +987,13 @@ function makeVacWb(rows, withGuide) {
     setCell(ws, r, 8, nv.daysN, {});
     setCell(ws, r, 9, v.note, {});
   });
+  // 사용일 합계 행
+  if (rows.length) {
+    const totalRow = 2 + rows.length;
+    const sumDays = rows.reduce((acc, v) => acc + (normVac(v).daysN || 0), 0);
+    setCell(ws, totalRow, 7, '합계', { font: FONT_B, fill: F.GRAY });
+    setCell(ws, totalRow, 8, Math.round(sumDays * 100) / 100, { font: FONT_B, fill: F.GRAY });
+  }
   [7, 11, 8, 11, 20, 11, 11, 8, 28].forEach((w, i) => ws.getColumn(i + 1).width = w);
   if (withGuide) {
     const g = wbx.addWorksheet('휴가구분 안내');
@@ -1072,6 +1080,7 @@ setupDrop('dropVac', 'fileVac', 'fnameVac', wb => {
   const rows = findRows(wb, ['성명', '휴가구분', '사용일']);
   if (!rows) { alert('이 파일에서 휴가DB 양식(성명·휴가구분·사용일 헤더)을 찾지 못했습니다.'); return false; }
   state.vacs = parseVacations(rows);
+  sortVacs();
   renderVacs();
   return true;
 });
@@ -1106,18 +1115,7 @@ document.getElementById('tabSum').onclick = () => switchTab('sum');
 document.getElementById('tabRetire').onclick = () => switchTab('retire');
 
 /* ===================== 페이지네이션 ===================== */
-let PAGE_SIZE = 100;
-// 페이지당 표시 건수 변경
-document.getElementById('pageSizeSel').addEventListener('change', e => {
-  PAGE_SIZE = parseInt(e.target.value, 10) || 100;
-  // 모든 탭 1페이지로 리셋
-  pageState.people = 1; pageState.vac = 1; pageState.sum = 1; pageState.retire = 1;
-  // 현재 열려 있는 탭만 다시 그리기
-  if (document.getElementById('panePeople').style.display !== 'none') renderPeople();
-  else if (document.getElementById('paneVac').style.display !== 'none') renderVacs();
-  else if (document.getElementById('paneSum').style.display !== 'none') renderSummary();
-  else if (document.getElementById('paneRetire').style.display !== 'none') renderRetire();
-});
+const PAGE_SIZE = 100;
 // 탭별 현재 페이지 (1부터)
 const pageState = { people: 1, vac: 1, sum: 1, retire: 1 };
 
@@ -1277,15 +1275,25 @@ document.getElementById('addPeople').onclick = () => {
 };
 
 /* ----- 휴가DB 편집 테이블 ----- */
+// 휴가DB를 시작일 최근순(내림차순)으로 정렬. 시작일 없으면 신청일로 보조 정렬.
+function sortVacs() {
+  if (!state.vacs) return;
+  state.vacs.sort((a, b) => {
+    const da = parseDate(a.start) || parseDate(a.apply) || new Date(0);
+    const db = parseDate(b.start) || parseDate(b.apply) || new Date(0);
+    return db - da;
+  });
+}
 const VAC_KEYS = ['year', 'apply', 'name', 'dept', 'kind', 'start', 'end', 'days', 'note'];
 function renderVacs() {
   const tbody = document.querySelector('#tblVac tbody');
   const q = document.getElementById('vacSearch').value.trim().toLowerCase();
+  const col = document.getElementById('vacSearchCol').value;
   tbody.innerHTML = '';
-  // 검색 필터 (원본 인덱스 보존)
+  // 검색 필터 (원본 인덱스 보존) — 선택한 컬럼만 검색
   const filtered = [];
   (state.vacs || []).forEach((v, i) => {
-    if (q && !(v.name.toLowerCase().includes(q) || v.year.includes(q) || v.kind.toLowerCase().includes(q))) return;
+    if (q && !String(v[col] ?? '').toLowerCase().includes(q)) return;
     filtered.push({ v, i });
   });
   const [start, end] = pageSlice('vac', filtered.length);
@@ -1321,6 +1329,7 @@ function renderVacs() {
   [...KNOWN_KINDS].forEach(k => { const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
 }
 document.getElementById('vacSearch').addEventListener('input', () => { pageState.vac = 1; renderVacs(); });
+document.getElementById('vacSearchCol').addEventListener('change', () => { pageState.vac = 1; renderVacs(); });
 document.getElementById('addVac').onclick = () => {
   if (!state.vacs) state.vacs = [];
   const today = fmtDate(new Date());
@@ -1723,8 +1732,9 @@ document.getElementById('dlVac').onclick = () => { if (state.vacs) downloadWb(ma
 document.getElementById('dlVacFiltered').onclick = () => {
   if (!state.vacs || !state.vacs.length) { alert('내려받을 휴가 데이터가 없습니다.'); return; }
   const q = document.getElementById('vacSearch').value.trim().toLowerCase();
+  const col = document.getElementById('vacSearchCol').value;
   const rows = q
-    ? state.vacs.filter(v => v.name.toLowerCase().includes(q) || v.year.includes(q) || v.kind.toLowerCase().includes(q))
+    ? state.vacs.filter(v => String(v[col] ?? '').toLowerCase().includes(q))
     : state.vacs;
   if (!rows.length) { alert("'" + q + "' 검색 결과가 없습니다."); return; }
   const fname = q ? '휴가DB_' + q + '.xlsx' : '휴가DB_전체.xlsx';
@@ -1851,6 +1861,7 @@ function applyData(data, sourceLabel) {
   if (!Array.isArray(data.people) && !Array.isArray(data.vacs)) throw new Error('데이터 형식이 올바르지 않습니다');
   state.people = Array.isArray(data.people) ? data.people : null;
   state.vacs = Array.isArray(data.vacs) ? data.vacs : null;
+  sortVacs();
   state.years = []; state.selected = new Set();
   if (Array.isArray(data.selected)) state.pendingSelected = data.selected;
   retirePay = (data.retirePay && typeof data.retirePay === 'object') ? data.retirePay : {};
