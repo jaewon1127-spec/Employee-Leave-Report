@@ -112,6 +112,9 @@
   table.sum td:first-child, table.sum td:nth-child(2) { text-align: center; }
   table.sum tr.person-first td { border-top: 2px solid var(--line); }
   table.sum tr.total-row td { background: var(--accent-soft); font-weight: 700; }
+  /* 입사일 이전 연차 사용 내역 행 강조 (붉은 톤) */
+  table.edit tr.pre-hire td { background: #fdecec; }
+  table.edit tr.pre-hire input { background: transparent; }
   table.sum td.zero { color: #c2bfb4; }
 
   .years { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -380,7 +383,14 @@
           <label for="vacSearch">검색어</label>
           <input type="search" id="vacSearch" placeholder="비우면 전체">
         </div>
+        <div class="ret-field">
+          <label>입사일 이전 연차</label>
+          <label class="row" style="font-weight:400;font-size:13px;cursor:pointer;gap:5px;">
+            <input type="checkbox" id="vacPreOnly"> 이 내역만 보기
+          </label>
+        </div>
         <div class="ret-actions">
+          <button class="btn-mini" id="dlPreHire">입사일 이전 내려받기</button>
           <button class="btn-mini" id="dlVacFiltered">조회 결과 내려받기</button>
           <span class="count" id="vacCount"></span>
         </div>
@@ -1276,6 +1286,32 @@ document.getElementById('addPeople').onclick = () => {
 };
 
 /* ----- 휴가DB 편집 테이블 ----- */
+// 성명 → 입사일(Date) 매핑 (인원DB 기준)
+function hireByName() {
+  const m = {};
+  (state.people || []).forEach(p => {
+    if (p.name) { const h = parseDate(p.hire); if (h) m[p.name] = h; }
+  });
+  return m;
+}
+// 입사일 이전 연차 여부: 시작일 또는 신청일 중 하나라도 입사일보다 빠르면 true
+// (연차 계열만 대상: 연차/반차/여름휴가/월차)
+const PRE_HIRE_KINDS = ['연차', '반차', '여름휴가', '월차'];
+function isPreHire(v, hireMap) {
+  const hire = hireMap[v.name];
+  if (!hire) return false; // 입사일 정보 없으면 판별 불가
+  if (!PRE_HIRE_KINDS.includes(v.kind)) return false;
+  const s = parseDate(v.start), a = parseDate(v.apply);
+  return (s && s < hire) || (a && a < hire);
+}
+// 입사일 이전 연차 목록 (원본 인덱스 포함)
+function preHireList() {
+  const hireMap = hireByName();
+  const out = [];
+  (state.vacs || []).forEach((v, i) => { if (isPreHire(v, hireMap)) out.push({ v, i }); });
+  return out;
+}
+
 // 휴가DB를 시작일 최근순(내림차순)으로 정렬. 시작일 없으면 신청일로 보조 정렬.
 function sortVacs() {
   if (!state.vacs) return;
@@ -1290,16 +1326,20 @@ function renderVacs() {
   const tbody = document.querySelector('#tblVac tbody');
   const q = document.getElementById('vacSearch').value.trim().toLowerCase();
   const col = document.getElementById('vacSearchCol').value;
+  const onlyPre = document.getElementById('vacPreOnly') && document.getElementById('vacPreOnly').checked;
+  const hireMap = hireByName();
   tbody.innerHTML = '';
-  // 검색 필터 (원본 인덱스 보존) — 선택한 컬럼만 검색
+  // 검색 필터 (원본 인덱스 보존) — 선택한 컬럼만 검색 + 입사일 이전 토글
   const filtered = [];
   (state.vacs || []).forEach((v, i) => {
     if (q && !String(v[col] ?? '').toLowerCase().includes(q)) return;
+    if (onlyPre && !isPreHire(v, hireMap)) return;
     filtered.push({ v, i });
   });
   const [start, end] = pageSlice('vac', filtered.length);
   filtered.slice(start, end).forEach(({ v, i }) => {
     const tr = document.createElement('tr');
+    if (isPreHire(v, hireMap)) { tr.classList.add('pre-hire'); tr.title = '입사일 이전 연차 사용 내역'; }
     VAC_KEYS.forEach(key => {
       const td = document.createElement('td');
       const inp = mkInput(v[key], val => v[key] = val);
@@ -1321,8 +1361,10 @@ function renderVacs() {
     tbody.appendChild(tr);
   });
   const total = state.vacs ? state.vacs.length : 0;
-  document.getElementById('vacCount').textContent =
-    q ? filtered.length + '건 표시 / 전체 ' + total + '건' : '전체 ' + total + '건';
+  const preCnt = preHireList().length;
+  let countTxt = q || onlyPre ? filtered.length + '건 표시 / 전체 ' + total + '건' : '전체 ' + total + '건';
+  if (preCnt > 0) countTxt += ' · ⚠ 입사일 이전 ' + preCnt + '건';
+  document.getElementById('vacCount').textContent = countTxt;
   renderPager('pagerVac', 'vac', filtered.length, renderVacs);
   // 휴가구분 자동완성 목록
   const dl = document.getElementById('kindList');
@@ -1331,6 +1373,14 @@ function renderVacs() {
 }
 document.getElementById('vacSearch').addEventListener('input', () => { pageState.vac = 1; renderVacs(); });
 document.getElementById('vacSearchCol').addEventListener('change', () => { pageState.vac = 1; renderVacs(); });
+document.getElementById('vacPreOnly').addEventListener('change', () => { pageState.vac = 1; renderVacs(); });
+// 입사일 이전 연차만 엑셀로 내려받기
+document.getElementById('dlPreHire').onclick = () => {
+  if (!state.people || !state.vacs) { alert('데이터가 없습니다.'); return; }
+  const rows = preHireList().map(x => x.v);
+  if (!rows.length) { alert('입사일 이전 연차 사용 내역이 없습니다.'); return; }
+  downloadWb(makeVacWb(rows, false), '입사일이전연차_' + fmtDate(new Date()) + '.xlsx');
+};
 document.getElementById('addVac').onclick = () => {
   if (!state.vacs) state.vacs = [];
   const today = fmtDate(new Date());
