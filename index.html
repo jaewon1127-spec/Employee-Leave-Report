@@ -1157,8 +1157,12 @@ function wireSortHeaders(ths, keys, tabKey, onSort) {
     if (st && st.key === key) th.textContent += (st.dir === 1 ? ' ▲' : ' ▼');
     th.onclick = () => {
       const cur = sortState[tabKey];
-      if (cur && cur.key === key) cur.dir *= -1;
-      else sortState[tabKey] = { key, dir: 1 };
+      if (cur && cur.key === key) {
+        if (cur.dir === 1) cur.dir = -1;           // 오름 → 내림
+        else sortState[tabKey] = null;             // 내림 → 정렬 해제(원래 순서)
+      } else {
+        sortState[tabKey] = { key, dir: 1 };       // 새 컬럼 → 오름차순
+      }
       onSort();
     };
   });
@@ -1339,8 +1343,8 @@ function isPreHire(v, hireMap) {
   const hire = hireMap[v.name];
   if (!hire) return false; // 입사일 정보 없으면 판별 불가
   if (!PRE_HIRE_KINDS.includes(v.kind)) return false;
-  const s = parseDate(v.start), a = parseDate(v.apply);
-  return (s && s < hire) || (a && a < hire);
+  const s = parseDate(v.start);
+  return s && s < hire;
 }
 // 입사일 이전 연차 목록 (원본 인덱스 포함)
 function preHireList() {
