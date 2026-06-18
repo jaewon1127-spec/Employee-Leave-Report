@@ -417,6 +417,7 @@
           </div>
         </div>
         <div class="ret-actions">
+          <button class="btn-mini" id="dlSumFiltered">조회 결과 내려받기</button>
           <span class="count" id="sumCount"></span>
         </div>
       </div>
@@ -1728,6 +1729,22 @@ function showCalcDetail(s) {
 /* ----- 수정한 DB 내려받기 ----- */
 document.getElementById('dlPeople').onclick = () => { if (state.people) downloadWb(makePeopleWb(state.people, false), '인원DB.xlsx'); };
 document.getElementById('dlVac').onclick = () => { if (state.vacs) downloadWb(makeVacWb(state.vacs, false), '휴가DB.xlsx'); };
+// 휴가내역 합계 탭 — 조회 결과(이름 검색) 엑셀 내려받기
+document.getElementById('dlSumFiltered').onclick = async () => {
+  if (!state.people || !state.vacs) { alert('내려받을 데이터가 없습니다.'); return; }
+  const q = document.getElementById('sumSearch').value.trim().toLowerCase();
+  const people = state.people.filter(p => p.name && (!q || p.name.toLowerCase().includes(q)));
+  if (!people.length) { alert(q ? "'" + q + "' 검색 결과가 없습니다." : '인원 데이터가 없습니다.'); return; }
+  showLoading('휴가내역 합계 시트 생성 중...');
+  await nextFrame();
+  try {
+    const vacsN = state.vacs.map(normVac);
+    const wbx = new ExcelJS.Workbook();
+    buildSummarySheet(wbx, people, vacsN);
+    await downloadWb(wbx, '휴가내역합계_' + (q ? q : '전체') + '.xlsx');
+    hideLoading();
+  } catch (err) { hideLoading(); alert('생성 실패: ' + err.message); }
+};
 /* ----- 휴가DB 탭 조회 결과 내려받기 (검색어 없으면 전체) ----- */
 document.getElementById('dlVacFiltered').onclick = () => {
   if (!state.vacs || !state.vacs.length) { alert('내려받을 휴가 데이터가 없습니다.'); return; }
