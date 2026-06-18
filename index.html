@@ -112,6 +112,8 @@
   table.sum td:first-child, table.sum td:nth-child(2) { text-align: center; }
   table.sum tr.person-first td { border-top: 2px solid var(--line); }
   table.sum tr.total-row td { background: var(--accent-soft); font-weight: 700; }
+  table.edit thead th { user-select: none; }
+  table.edit thead th:hover { background: var(--accent-soft); }
   /* 입사일 이전 연차 사용 내역 행 강조 (붉은 톤) */
   table.edit tr.pre-hire td { background: #fdecec; }
   table.edit tr.pre-hire input { background: transparent; }
@@ -1129,7 +1131,38 @@ document.getElementById('tabRetire').onclick = () => switchTab('retire');
 const PAGE_SIZE = 100;
 // 탭별 현재 페이지 (1부터)
 const pageState = { people: 1, vac: 1, sum: 1, retire: 1 };
-
+/* ===================== 컬럼 정렬 ===================== */
+const sortState = { people: null, vac: null, sum: null, retire: null };
+function cmpVal(a, b) {
+  const ea = (a === undefined || a === null || a === ''), eb = (b === undefined || b === null || b === '');
+  if (ea && eb) return 0;
+  if (ea) return 1; if (eb) return -1;
+  const da = parseDate(a), db = parseDate(b);
+  if (da && db) return da - db;
+  const na = Number(String(a).replace(/,/g, '')), nb = Number(String(b).replace(/,/g, ''));
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  return String(a).localeCompare(String(b), 'ko');
+}
+function sortBy(arr, getVal, dir) {
+  return arr.slice().sort((x, y) => cmpVal(getVal(x), getVal(y)) * dir);
+}
+function wireSortHeaders(ths, keys, tabKey, onSort) {
+  ths.forEach((th, i) => {
+    const key = keys[i];
+    if (!key) return;
+    th.style.cursor = 'pointer';
+    th.title = '클릭하면 이 컬럼으로 정렬';
+    const st = sortState[tabKey];
+    th.textContent = th.textContent.replace(/[ ▲▼]+$/, '');
+    if (st && st.key === key) th.textContent += (st.dir === 1 ? ' ▲' : ' ▼');
+    th.onclick = () => {
+      const cur = sortState[tabKey];
+      if (cur && cur.key === key) cur.dir *= -1;
+      else sortState[tabKey] = { key, dir: 1 };
+      onSort();
+    };
+  });
+}
 // 페이지 바 그리기. total=전체 항목 수, pagerId=바 DOM id, key=pageState 키, onGo=페이지 변경 시 재렌더 콜백
 function renderPager(pagerId, key, total, onGo) {
   const el = document.getElementById(pagerId);
@@ -1246,6 +1279,8 @@ function attachNumberInput(inp, decimals) {
 function renderPeople() {
   const tbody = document.querySelector('#tblPeople tbody');
   tbody.innerHTML = '';
+  const sp = sortState.people;
+  if (sp && state.people) state.people = sortBy(state.people, p => p[sp.key], sp.dir);
   const all = state.people || [];
   const [start, end] = pageSlice('people', all.length);
   all.slice(start, end).forEach((p, idx) => {
@@ -1275,6 +1310,9 @@ function renderPeople() {
     tbody.appendChild(tr);
   });
   renderPager('pagerPeople', 'people', all.length, renderPeople);
+  wireSortHeaders([...document.querySelectorAll('#tblPeople thead th')],
+    [null, 'name', 'status', 'dept', 'hire', 'leave', null], 'people',
+    () => { pageState.people = 1; renderPeople(); });
 }
 document.getElementById('addPeople').onclick = () => {
   if (!state.people) state.people = [];
@@ -1329,6 +1367,8 @@ function renderVacs() {
   const onlyPre = document.getElementById('vacPreOnly') && document.getElementById('vacPreOnly').checked;
   const hireMap = hireByName();
   tbody.innerHTML = '';
+  const sv = sortState.vac;
+  if (sv && state.vacs) state.vacs = sortBy(state.vacs, v => v[sv.key], sv.dir);
   // 검색 필터 (원본 인덱스 보존) — 선택한 컬럼만 검색 + 입사일 이전 토글
   const filtered = [];
   (state.vacs || []).forEach((v, i) => {
@@ -1366,6 +1406,9 @@ function renderVacs() {
   if (preCnt > 0) countTxt += ' · ⚠ 입사일 이전 ' + preCnt + '건';
   document.getElementById('vacCount').textContent = countTxt;
   renderPager('pagerVac', 'vac', filtered.length, renderVacs);
+  wireSortHeaders([...document.querySelectorAll('#tblVac thead th')],
+    ['year', 'apply', 'name', 'dept', 'kind', 'start', 'end', 'days', 'note', null], 'vac',
+    () => { pageState.vac = 1; renderVacs(); });
   // 휴가구분 자동완성 목록
   const dl = document.getElementById('kindList');
   dl.innerHTML = '';
@@ -1498,11 +1541,24 @@ function renderSummary() {
   tbody.innerHTML = '';
   // 이름 필터
   const filtered = state.people.filter(p => p.name && (!q || p.name.toLowerCase().includes(q)));
+  const ss = sortState.sum;
+  let pageItems;
+  if (ss) {
+    const computed = filtered.map(p => ({ p, s: calcTotals(p, vacsN) }));
+    const gv = it => ({ name: it.s.name, dept: it.s.dept, hire: it.s.hire ? fmtDate(it.s.hire) : '',
+      yrs: it.s.yrs, granted: it.s.granted, used: it.s.used, remain: it.s.remain }[ss.key]);
+    computed.sort((a, b) => cmpVal(gv(a), gv(b)) * ss.dir);
+    const [s0, e0] = pageSlice('sum', computed.length);
+    pageItems = computed.slice(s0, e0);
+  } else {
+    const [s0, e0] = pageSlice('sum', filtered.length);
+    pageItems = filtered.slice(s0, e0).map(p => ({ p, s: null }));
+  }
   const [start, end] = pageSlice('sum', filtered.length);
   let tg = 0, tu = 0, tr2 = 0;
-  filtered.slice(start, end).forEach((p, idx) => {
+  pageItems.forEach((item, idx) => {
     const no = start + idx + 1;
-    const s = calcTotals(p, vacsN); // 현재 페이지 100명만 계산 → 가벼움
+    const s = item.s || calcTotals(item.p, vacsN);
     tg += s.granted; tu += s.used; tr2 += s.remain;
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
@@ -1527,6 +1583,9 @@ function renderSummary() {
     tbody.appendChild(tr);
   }
   renderPager('pagerSum', 'sum', filtered.length, renderSummary);
+  wireSortHeaders([...document.querySelectorAll('#tblSum thead th')],
+    [null, 'name', 'dept', 'hire', 'yrs', 'granted', 'used', 'remain'], 'sum',
+    () => { pageState.sum = 1; renderSummary(); });
   document.getElementById('sumCount').textContent =
     (q ? filtered.length + '명 표시 / 전체 ' + state.people.filter(p => p.name).length + '명' : '전체 ' + filtered.length + '명')
     + ' · 기준일 ' + fmtDate(sumBaseDate());
@@ -1607,7 +1666,23 @@ function renderRetire() {
     return true;
   });
   // 이름 검색
-  const shownList = list.filter(p => !q || p.name.toLowerCase().includes(q));
+  let shownList = list.filter(p => !q || p.name.toLowerCase().includes(q));
+  const rs = sortState.retire;
+  if (rs) {
+    if (['granted','used','remain','pay'].includes(rs.key)) {
+      shownList = shownList.map(p => {
+        const r = calcRetiree(p, vacsN); let val = 0;
+        if (r) {
+          if (rs.key === 'pay') { const sv = retirePay[r.name] || {}; const rate = sv.rate != null ? sv.rate : '';
+            val = (rate !== '' && !isNaN(rate)) ? r.remain * rate : 0; }
+          else val = r[rs.key];
+        }
+        return { p, val };
+      }).sort((a, b) => cmpVal(a.val, b.val) * rs.dir).map(x => x.p);
+    } else {
+      shownList = sortBy(shownList, p => p[rs.key], rs.dir);
+    }
+  }
 
   const [pStart, pEnd] = pageSlice('retire', shownList.length);
   let totRemain = 0, totPay = 0;
@@ -1670,6 +1745,9 @@ function renderRetire() {
     tbody.appendChild(tr);
   }
   renderPager('pagerRetire', 'retire', shownList.length, renderRetire);
+  wireSortHeaders([...document.querySelectorAll('#tblRetire thead th')],
+    [null, 'name', 'dept', 'hire', 'leave', 'granted', 'used', 'remain', null, 'pay'], 'retire',
+    () => { pageState.retire = 1; renderRetire(); });
 
   const totalRetirees = list.length;
   document.getElementById('retCount').textContent =
